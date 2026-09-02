@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#5A554B">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icon-192.png">
 <title>現場記録</title>
 <style>
 :root{
@@ -1375,6 +1378,17 @@ $('notes').addEventListener('input',()=>{
     }catch(e){ $('notesSaved').textContent='保存できず'; }
   },5000);
 });
+
+/* ================= ホーム画面から起動できるようにする =================
+   Service Worker は https か localhost でしか登録できない。
+   file:// で直接開いた時は登録に失敗するが、その場合も
+   アプリ自体は今まで通り動くので、黙って見送る。
+======================================================================= */
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>{
+    navigator.serviceWorker.register("./sw.js").catch(()=>{});
+  });
+}
 
 drawPhotos();
 (async()=>{

@@ -1,0 +1,16 @@
+{
+  "name": "現場記録",
+  "short_name": "現場記録",
+  "description": "その日の現場作業をスマホで記録する",
+  "lang": "ja",
+  "start_url": "./genba-log.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F2EFE9",
+  "theme_color": "#5A554B",
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

@@ -15,8 +15,11 @@ http.createServer((req,res)=>{
   if(fp!==ROOT&&!fp.startsWith(ROOT+path.sep)){ res.writeHead(403); return res.end('403'); }
   fs.readFile(fp,(e,b)=>{
     if(e){ res.writeHead(404,{'Content-Type':'text/plain; charset=utf-8'}); return res.end('404'); }
+    /* Service Worker のスクリプトは no-store だと登録に失敗することがある。
+       毎回検証させたいだけなので no-cache を使う。 */
+    const isSW=path.basename(fp)==='sw.js';
     res.writeHead(200,{'Content-Type':TYPES[path.extname(fp).toLowerCase()]||'application/octet-stream',
-      'Cache-Control':'no-store'});   /* Service Worker を入れる前提でキャッシュさせない */
+      'Cache-Control':isSW?'no-cache':'no-store'});
     res.end(b);
   });
 }).listen(PORT,()=>console.log('serving '+ROOT+'\n  http://localhost:'+PORT+'/'));

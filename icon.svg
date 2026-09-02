@@ -1,0 +1,11 @@
+<!-- アイコンの元データ。icon-192.png / icon-512.png はこれを書き出したもの。
+     maskable 対応のため、絵柄は中心から半径204px（=40%）の安全圏に収めてある。
+     刃の角が中心から203pxで、ぎりぎり収まる寸法。動かす時はここを崩さないこと。 -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#5A554B"/>
+  <g transform="translate(256,262) rotate(-18)">
+    <rect x="-104" y="-104" width="208" height="64" rx="32" fill="#3D6B7D"/>
+    <rect x="-22" y="-52" width="44" height="60" rx="12" fill="#3D6B7D"/>
+    <rect x="-158" y="4" width="316" height="124" rx="18" fill="#FDFCFA"/>
+  </g>
+</svg>
