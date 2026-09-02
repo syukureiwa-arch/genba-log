@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>現場記録</title>
+<style>
+:root{
+  --mortar:#8C8578;
+  --mortar-dark:#5A554B;
+  --mortar-light:#C9C3B6;
+  --paper:#F2EFE9;
+  --paper-deep:#E4DFD5;
+  --ink:#2B2823;
+  --ink-soft:#6B6559;
+  --trowel:#3D6B7D;
+  --line:#D6D0C4;
+  --white:#FDFCFA;
+  --warn:#A8452F;
+  --draft:#B8873F;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{
+  font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN",system-ui,sans-serif;
+  background:var(--paper);
+  color:var(--ink);
+  font-size:16px;
+  line-height:1.6;
+  padding-bottom:88px;
+  -webkit-font-smoothing:antialiased;
+}
+header{
+  background:var(--mortar-dark);
+  color:var(--white);
+  padding:14px 16px;
+  padding-top:calc(14px + env(safe-area-inset-top,0));
+  position:sticky;top:0;z-index:50;
+  display:flex;align-items:baseline;justify-content:space-between;
+}
+header h1{font-size:17px;font-weight:600;letter-spacing:.08em}
+header .count{font-size:12px;color:var(--mortar-light)}
+
+.wrap{padding:12px 12px 0}
+
+/* ---- 入力カード ---- */
+.card{
+  background:var(--white);
+  border:1px solid var(--line);
+  border-radius:10px;
+  margin-bottom:12px;
+  overflow:hidden;
+}
+.card-head{
+  padding:10px 14px;
+  background:var(--paper-deep);
+  border-bottom:1px solid var(--line);
+  font-size:13px;font-weight:600;color:var(--ink-soft);
+  display:flex;justify-content:space-between;align-items:center;
+}
+.card-body{padding:14px}
+
+label{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:5px;font-weight:600}
+.sr{position:absolute;left:-9999px}
+input[type=text],input[type=date],input[type=time],textarea,select{
+  width:100%;padding:11px 12px;
+  border:1px solid var(--line);border-radius:8px;
+  background:var(--white);color:var(--ink);
+  font-size:16px;font-family:inherit;
+}
+textarea{min-height:88px;resize:vertical;line-height:1.7}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--trowel);outline-offset:-1px;border-color:transparent}
+button:focus-visible{outline:2px solid var(--trowel);outline-offset:2px}
+
+.row{display:flex;gap:8px;margin-bottom:12px}
+.row>div{flex:1}
+.field{margin-bottom:12px}
+
+/* ---- 書きかけバー ---- */
+.draftbar{
+  background:#FBF3E2;border:1px solid var(--draft);border-radius:9px;
+  padding:10px 12px;margin-bottom:12px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  font-size:13px;color:#6A4E19;
+}
+.draftbar button{
+  background:none;color:#6A4E19;text-decoration:underline;font-size:13px;
+  padding:4px 2px;white-space:nowrap;
+}
+.autosave{font-size:11px;color:var(--ink-soft);text-align:right;margin:-4px 0 12px}
+.saveerr{font-size:12px;color:var(--warn);line-height:1.6;margin:8px 0 16px;min-height:1px}
+.saveerr:empty{margin:0 0 16px}
+.modebar{padding:10px 14px;font-size:12px;line-height:1.6}
+.modebar.ok{background:#FBF3E2;color:#6A4E19;border-bottom:1px solid var(--draft)}
+.modebar.ng{background:var(--warn);color:#fff}
+
+/* ---- 備考 ---- */
+.memo-open{width:100%;margin-bottom:12px;text-align:center}
+.memo-open.has{background:#FBF3E2;border-color:var(--draft);color:#6A4E19;font-weight:600}
+.lnk{background:none;color:var(--ink-soft);text-decoration:underline;font-size:12px;padding:2px}
+.log-note{
+  margin-top:10px;padding:9px 11px;
+  background:#FBF3E2;border-left:3px solid var(--draft);border-radius:0 6px 6px 0;
+  font-size:13px;white-space:pre-wrap;line-height:1.7;color:#5A451A;
+}
+.log-note::before{content:"備考";display:block;font-size:11px;font-weight:700;color:var(--draft);margin-bottom:2px}
+
+/* ---- 履歴チップ ---- */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.chip{
+  padding:6px 11px;border-radius:14px;
+  background:var(--paper-deep);border:1px solid var(--line);
+  font-size:13px;color:var(--ink-soft);cursor:pointer;font-family:inherit;
+}
+.chip:active{background:var(--mortar-light)}
+
+/* ---- ボタン ---- */
+button{font-family:inherit;cursor:pointer;border:none}
+.btn{padding:13px 18px;border-radius:8px;font-size:15px;font-weight:600}
+.btn-main{background:var(--trowel);color:var(--white);width:100%}
+.btn-main:active{opacity:.85}
+.btn-sub{
+  background:var(--white);color:var(--ink-soft);
+  border:1px solid var(--line);padding:9px 14px;font-size:13px;border-radius:7px;
+}
+.btn-sub:active{background:var(--paper-deep)}
+.btn-row{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+
+/* ---- 写真 ---- */
+.photo-add{
+  border:2px dashed var(--line);border-radius:9px;
+  padding:20px;text-align:center;color:var(--ink-soft);
+  font-size:14px;background:var(--paper);width:100%;
+}
+.photo-add:active{background:var(--paper-deep)}
+.photo-add[disabled]{opacity:.45}
+.photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:9px}
+.photo-item{position:relative;aspect-ratio:1;border-radius:7px;overflow:hidden;background:var(--paper-deep)}
+.photo-item img{width:100%;height:100%;object-fit:cover;display:block}
+.photo-del{
+  position:absolute;top:3px;right:3px;
+  width:26px;height:26px;border-radius:50%;
+  background:rgba(0,0,0,.6);color:#fff;font-size:15px;line-height:26px;text-align:center;padding:0;
+}
+
+/* ---- 記録リスト ---- */
+.log{
+  background:var(--white);border:1px solid var(--line);
+  border-radius:10px;margin-bottom:10px;overflow:hidden;
+}
+.log.is-draft{border-color:var(--draft)}
+.log-head{
+  padding:11px 14px;display:flex;justify-content:space-between;align-items:center;gap:8px;
+  background:var(--paper-deep);border-bottom:1px solid var(--line);
+}
+.log.is-draft .log-head{background:#FBF3E2}
+.log-date{font-size:14px;font-weight:700;white-space:nowrap}
+.log-site{font-size:13px;color:var(--trowel);font-weight:600;text-align:right}
+.log-body{padding:12px 14px}
+.log-time{font-size:12px;color:var(--ink-soft);margin-bottom:6px}
+.log-text{font-size:14px;white-space:pre-wrap;line-height:1.75}
+.log-text.none{color:var(--ink-soft)}
+.log-photos{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:10px}
+.log-photos img,.ph-skel{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;display:block;background:var(--paper-deep);border:none;padding:0}
+.ph-skel{animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.log-actions{display:flex;gap:8px;padding:0 14px 12px}
+
+.sec-head{
+  font-size:12px;font-weight:700;color:var(--ink-soft);
+  margin:4px 0 8px;display:flex;align-items:center;gap:7px;
+}
+.sec-head::after{content:"";flex:1;height:1px;background:var(--line)}
+.draft-mark{
+  font-size:11px;background:var(--draft);color:#fff;
+  padding:2px 7px;border-radius:4px;margin-left:6px;
+}
+
+/* ---- タブ ---- */
+.tabbar{
+  position:fixed;bottom:0;left:0;right:0;
+  background:var(--white);border-top:1px solid var(--line);
+  display:flex;z-index:60;
+  padding-bottom:env(safe-area-inset-bottom,0);
+}
+.tab{
+  flex:1;padding:12px 4px 11px;text-align:center;
+  font-size:12px;color:var(--ink-soft);background:none;font-weight:600;
+}
+.tab.on{color:var(--trowel);box-shadow:inset 0 2px 0 var(--trowel)}
+.tab .ic{display:block;font-size:19px;margin-bottom:2px;line-height:1}
+
+.view{display:none}
+.view.on{display:block}
+
+.empty{text-align:center;padding:50px 24px;color:var(--ink-soft);font-size:14px;line-height:1.9}
+
+.filters{display:flex;gap:8px;margin-bottom:12px}
+.filters input{flex:1.6;min-width:0}
+.filters select{flex:1;min-width:0}
+.toast{
+  position:fixed;bottom:78px;left:50%;transform:translateX(-50%) translateY(90px);
+  background:var(--ink);color:var(--white);
+  padding:11px 20px;border-radius:22px;font-size:14px;
+  z-index:100;transition:transform .25s;max-width:88%;text-align:center;
+}
+.toast.on{transform:translateX(-50%) translateY(0)}
+.toast.bad{background:var(--warn)}
+
+.stat{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.stat-box{
+  background:var(--white);border:1px solid var(--line);
+  border-radius:9px;padding:12px;text-align:center;
+}
+.stat-num{font-size:22px;font-weight:700;color:var(--trowel);font-variant-numeric:tabular-nums}
+.stat-lbl{font-size:11px;color:var(--ink-soft);margin-top:2px}
+.hint{font-size:11px;color:var(--ink-soft);margin-top:5px;line-height:1.5}
+.srow{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px;gap:10px}
+.srow span:last-child{color:var(--ink-soft);white-space:nowrap}
+.srow i,.chip i,.log-site i{
+  font-style:normal;font-size:11px;color:var(--mortar);
+  display:block;font-weight:400;line-height:1.4;
+}
+.chip i{display:inline;margin-left:6px}
+.nodata{color:var(--ink-soft);font-size:14px}
+
+/* ---- 改善候補 ---- */
+.todo{list-style:none;font-size:14px}
+.todo li{padding:9px 0 9px 20px;border-bottom:1px solid var(--line);position:relative;line-height:1.55}
+.todo li:last-child{border-bottom:none}
+.todo li::before{content:"□";position:absolute;left:0;color:var(--mortar)}
+.todo b{display:block;font-weight:600}
+.todo span{font-size:12px;color:var(--ink-soft)}
+#notes{min-height:110px}
+
+/* ---- 写真ビューア ---- */
+.viewer{
+  position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:200;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+}
+.viewer img{max-width:100%;max-height:82vh;object-fit:contain}
+.viewer .vbar{
+  position:absolute;bottom:calc(24px + env(safe-area-inset-bottom,0));
+  display:flex;gap:10px;align-items:center;
+}
+.viewer .vbtn{
+  background:rgba(255,255,255,.15);color:#fff;border-radius:8px;
+  padding:11px 18px;font-size:15px;font-weight:600;
+}
+.viewer .vnum{color:#fff;font-size:13px;min-width:52px;text-align:center}
+.viewer .vclose{
+  position:absolute;top:calc(14px + env(safe-area-inset-top,0));right:14px;
+  background:rgba(255,255,255,.15);color:#fff;border-radius:50%;
+  width:40px;height:40px;font-size:20px;line-height:40px;padding:0;
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>現場記録</h1>
+  <span class="count" id="hdCount"></span>
+</header>
+
+<div class="modebar" id="modeBar" hidden></div>
+
+<!-- ========== 記録する ========== -->
+<div class="view on" id="v-write">
+<div class="wrap">
+
+  <div class="draftbar" id="draftBar" hidden>
+    <span id="draftMsg">書きかけを戻しました</span>
+    <button id="btnDropDraft">捨てる</button>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn-sub" id="btnCopyLast">前回をコピー</button>
+    <button class="btn-sub" id="btnClear">入力をクリア</button>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span>日付と時間</span></div>
+    <div class="card-body">
+      <div class="row">
+        <div>
+          <label for="fDate">日付</label>
+          <input type="date" id="fDate">
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="fStart">開始</label>
+          <input type="time" id="fStart">
+        </div>
+        <div>
+          <label for="fEnd">終了</label>
+          <input type="time" id="fEnd">
+        </div>
+      </div>
+      <div class="chips" id="timeChips"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span>元請・現場</span></div>
+    <div class="card-body">
+      <div class="field">
+        <label for="fClient">元請（工務店）</label>
+        <input type="text" id="fClient" placeholder="○○工務店">
+        <div class="chips" id="clientChips"></div>
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label for="fSite">現場（場所）</label>
+        <input type="text" id="fSite" placeholder="田中様邸、3丁目倉庫など">
+        <div class="chips" id="siteChips"></div>
+        <p class="hint" id="siteHint">元請を選ぶと、その現場だけに絞られます。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span>作業内容</span></div>
+    <div class="card-body">
+      <label class="sr" for="fWork">作業内容</label>
+      <textarea id="fWork" placeholder="何をしたか（後から書き足せます）"></textarea>
+      <div class="chips" id="workChips"></div>
+    </div>
+  </div>
+
+  <button class="btn-sub memo-open" id="btnMemoOpen">＋ 備考を書く</button>
+  <div class="card" id="memoCard" hidden>
+    <div class="card-head">
+      <span>備考</span>
+      <button class="lnk" id="btnMemoClose">閉じる</button>
+    </div>
+    <div class="card-body">
+      <label class="sr" for="fNote">備考</label>
+      <textarea id="fNote" placeholder="イレギュラー、受けた指示、次回への申し送り、考えたこと"></textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <span>写真</span>
+      <span id="photoCount" style="font-weight:400"></span>
+    </div>
+    <div class="card-body">
+      <button class="photo-add" id="photoAdd">写真を追加</button>
+      <input type="file" id="fPhoto" accept="image/*" multiple style="display:none">
+      <div class="photo-grid" id="photoGrid"></div>
+      <p class="hint">1件につき30枚まで。保存時に小さくしています。</p>
+    </div>
+  </div>
+
+  <p class="autosave" id="autoMsg">入力は自動で控えを取っています</p>
+  <button class="btn btn-main" id="btnSave">保存する</button>
+  <p class="saveerr" id="saveErr"></p>
+</div>
+</div>
+
+<!-- ========== 見る ========== -->
+<div class="view" id="v-list">
+<div class="wrap">
+  <div class="filters">
+    <label class="sr" for="qSearch">検索</label>
+    <input type="text" id="qSearch" placeholder="現場名・作業内容で検索">
+    <label class="sr" for="mList">月で絞る</label>
+    <select id="mList" class="mSel"></select>
+  </div>
+  <div id="logList"></div>
+</div>
+</div>
+
+<!-- ========== 集計・管理 ========== -->
+<div class="view" id="v-more">
+<div class="wrap">
+  <div class="filters">
+    <label class="sr" for="mMore">月で絞る</label>
+    <select id="mMore" class="mSel"></select>
+  </div>
+
+  <div class="stat">
+    <div class="stat-box"><div class="stat-num" id="sDays">0</div><div class="stat-lbl">記録日数</div></div>
+    <div class="stat-box"><div class="stat-num" id="sSites">0</div><div class="stat-lbl">現場数</div></div>
+    <div class="stat-box"><div class="stat-num" id="sHours">0</div><div class="stat-lbl">合計作業時間</div></div>
+    <div class="stat-box"><div class="stat-num" id="sPhotos">0</div><div class="stat-lbl">写真</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span>元請ごと</span><span id="statScope" style="font-weight:400"></span></div>
+    <div class="card-body" id="clientStats"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span>現場ごと</span></div>
+    <div class="card-body" id="siteStats"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span>データの管理</span></div>
+    <div class="card-body">
+      <button class="btn-sub" id="btnExport" style="width:100%;margin-bottom:8px">テキストで書き出す</button>
+      <button class="btn-sub" id="btnBackup" style="width:100%;margin-bottom:8px">バックアップを保存（写真つき・全期間）</button>
+      <input type="file" id="fRestore" accept=".json" style="display:none">
+      <button class="btn-sub" id="btnRestore" style="width:100%">バックアップから復元</button>
+      <p class="hint">書き出しは上で選んだ月の分だけ出ます。記録はこの端末の中だけに保存されます。機種変更の前は必ずバックアップを取ってください。</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span>これから直す候補</span></div>
+    <div class="card-body">
+      <ul class="todo">
+        <li><b>バックアップの催促</b><span>端末を変えたら記録は全部消える。しばらく取ってなければ警告を出す</span></li>
+        <li><b>写真に一言メモ</b><span>30枚も撮ると後から「これどこの写真だ」になる</span></li>
+        <li><b>現場で絞り込み</b><span>今は検索窓に打つしかない。月と同じように選べるようにする</span></li>
+        <li><b>前日分の入力を楽に</b><span>後から昨日の分を書くとき、日付をいじるのが面倒</span></li>
+      </ul>
+      <p class="hint">やるやらないは指示待ち。下のメモに書いたことも次の相談ネタにする。</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span>気づいたこと</span><span id="notesSaved" style="font-weight:400"></span></div>
+    <div class="card-body">
+      <label class="sr" for="notes">気づいたこと</label>
+      <textarea id="notes" placeholder="使ってて不便だったこと、欲しい機能をここに書き溜める"></textarea>
+      <p class="hint">自動で保存されます。記録とは別枠なので消えません。</p>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="tabbar">
+  <button class="tab on" data-v="write"><span class="ic">✎</span>記録する</button>
+  <button class="tab" data-v="list"><span class="ic">▤</span>見る</button>
+  <button class="tab" data-v="more"><span class="ic">▧</span>集計</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const KEY='genba_logs_v2';
+const OLDKEY='genba_logs_v1';
+const PKEY='genba_photo:';
+const DKEY='genba_draft';
+const DPKEY='genba_draft_photos';
+const MAX_PHOTOS=30;
+const CHUNK=3;              /* 写真は3枚ずつ分けて保存 */
+const MAX_BYTES=4200000;
+
+let logs=[];
+let photos=[];
+let photoCache={};
+let editId=null;
+let curMonth='';            /* '' = 全期間 */
+
+const $=id=>document.getElementById(id);
+
+/* ================= 保存先（環境に合わせて自動で切り替え） =================
+   app   … アプリ内の保存領域（本命）
+   local … ブラウザの保存領域（ファイルを直接開いた時など）
+   mem   … どちらも使えない。閉じると消える
+========================================================================= */
+const store={
+  mode:'mem',
+  mem:{},
+  async init(){
+    if(window.storage){
+      try{
+        await window.storage.set('genba_probe','1');
+        const r=await window.storage.get('genba_probe');
+        if(r&&r.value==='1'){
+          this.mode='app';
+          try{ await window.storage.delete('genba_probe'); }catch(e){}
+          return;
+        }
+      }catch(e){}
+    }
+    try{
+      localStorage.setItem('genba_probe','1');
+      if(localStorage.getItem('genba_probe')==='1'){
+        localStorage.removeItem('genba_probe');
+        this.mode='local';
+        return;
+      }
+    }catch(e){}
+    this.mode='mem';
+  },
+  async get(k){
+    if(this.mode==='app'){ return await window.storage.get(k); }
+    if(this.mode==='local'){
+      const v=localStorage.getItem(k);
+      return v===null?null:{key:k,value:v};
+    }
+    const v=this.mem[k];
+    return v===undefined?null:{key:k,value:v};
+  },
+  async set(k,v){
+    if(this.mode==='app'){ await window.storage.set(k,v); return true; }
+    if(this.mode==='local'){ localStorage.setItem(k,v); return true; }
+    this.mem[k]=v; return true;
+  },
+  async del(k){
+    if(this.mode==='app'){ await window.storage.delete(k); return true; }
+    if(this.mode==='local'){ localStorage.removeItem(k); return true; }
+    delete this.mem[k]; return true;
+  }
+};
+function showMode(){
+  const b=$('modeBar');
+  if(store.mode==='app'){ b.hidden=true; return; }
+  b.hidden=false;
+  if(store.mode==='local'){
+    b.className='modebar ok';
+    b.textContent='このブラウザに保存しています。履歴を消すと記録も消えるので、こまめにバックアップを取ってください。';
+  }else{
+    b.className='modebar ng';
+    b.textContent='この環境では保存ができません。画面を閉じると記録は消えます。書いた内容は「集計」からテキストで書き出してください。';
+  }
+}
+
+/* ================= 保存・読込 ================= */
+async function load(){
+  let r=null;
+  try{ r=await store.get(KEY); }catch(e){ r=null; }
+  if(r&&r.value){
+    try{ logs=JSON.parse(r.value); }catch(e){ logs=[]; }
+  }else{
+    await migrate();
+  }
+  buildMonths();
+  render();
+  await restoreDraft();
+}
+let lastErr='';
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+
+/* 書き込みは失敗しても数回粘る（回数制限に当たった時の保険） */
+async function setKey(k,v,tries){
+  tries=tries||3;
+  for(let i=0;i<tries;i++){
+    try{ await store.set(k,v); return true; }
+    catch(e){
+      lastErr=(e&&e.message)?String(e.message).slice(0,80):'原因不明';
+      if(i<tries-1) await wait(700*(i+1));
+    }
+  }
+  return false;
+}
+async function saveLogs(){
+  const ok=await setKey(KEY,JSON.stringify(logs));
+  if(!ok){
+    toast('記録を保存できませんでした（'+lastErr+'）',true);
+    $('saveErr').textContent='保存に失敗：'+lastErr+' / 入力はそのまま残しています。少し待ってもう一度押してください';
+  }else{
+    $('saveErr').textContent='';
+  }
+  return ok;
+}
+function chunkCount(n){ return Math.ceil((n||0)/CHUNK); }
+
+async function savePhotos(id,arr,prev){
+  const oldCount=prev?prev.photoCount||0:0;
+  /* 中身が変わっていなければ何も書かない */
+  const cached=photoCache[id];
+  if(cached&&cached.length===arr.length&&JSON.stringify(cached)===JSON.stringify(arr)) return true;
+
+  const old=chunkCount(oldCount);
+  const now=chunkCount(arr.length);
+  for(let i=0;i<now;i++){
+    const body=JSON.stringify(arr.slice(i*CHUNK,(i+1)*CHUNK));
+    if(body.length>MAX_BYTES){ lastErr='写真が大きすぎます'; return false; }
+    if(!await setKey(PKEY+id+':'+i,body)) return false;
+  }
+  for(let i=now;i<old;i++){ try{ await store.del(PKEY+id+':'+i); }catch(e){} }
+  /* 旧・単一キー形式の掃除は、それが残っている記録のときだけ */
+  if(prev&&!prev.c&&oldCount){ try{ await store.del(PKEY+id); }catch(e){} }
+  photoCache[id]=arr.slice();
+  return true;
+}
+async function getPhotos(id){
+  if(photoCache[id]) return photoCache[id];
+  let arr=[];
+  for(let i=0;;i++){
+    let r=null;
+    try{ r=await store.get(PKEY+id+':'+i); }catch(e){ break; }
+    if(!r||!r.value) break;
+    try{ arr=arr.concat(JSON.parse(r.value)); }catch(e){ break; }
+  }
+  if(!arr.length){
+    try{
+      const r=await store.get(PKEY+id);
+      if(r&&r.value) arr=JSON.parse(r.value);
+    }catch(e){}
+  }
+  photoCache[id]=arr;
+  return arr;
+}
+async function dropPhotos(id,count){
+  for(let i=0;i<chunkCount(count)+1;i++){ try{ await store.del(PKEY+id+':'+i); }catch(e){} }
+  try{ await store.del(PKEY+id); }catch(e){}
+  delete photoCache[id];
+}
+
+async function migrate(){
+  let old=null;
+  try{ old=await store.get(OLDKEY); }catch(e){ return; }
+  if(!old||!old.value) return;
+  let arr;
+  try{ arr=JSON.parse(old.value); }catch(e){ return; }
+  if(!Array.isArray(arr)||!arr.length) return;
+
+  let ng=0;
+  for(const l of arr){
+    const ps=Array.isArray(l.photos)?l.photos.slice(0,MAX_PHOTOS):[];
+    const id=l.id||newId();
+    if(ps.length){ const ok=await savePhotos(id,ps,null); if(!ok) ng++; }
+    logs.push({
+      id, date:l.date||today(), client:l.client||'', site:l.site||'', work:l.work||'', note:l.note||'',
+      start:l.start||'', end:l.end||'',
+      photoCount:ps.length, c:1, draft:!(l.site&&l.work)
+    });
+  }
+  if(await saveLogs()){
+    try{ await store.del(OLDKEY); }catch(e){}
+    toast(ng?'引っ越しました（写真'+ng+'件は入りませんでした）':'前のデータを引き継ぎました');
+  }
+}
+
+/* ================= 画面共通 ================= */
+let toastTimer=null;
+function toast(m,bad){
+  const t=$('toast');
+  t.textContent=m;
+  t.classList.toggle('bad',!!bad);
+  t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('on'),2400);
+}
+document.querySelectorAll('.tab').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+    document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    $('v-'+b.dataset.v).classList.add('on');
+    if(b.dataset.v!=='write') render();
+    window.scrollTo(0,0);
+  };
+});
+function today(){
+  const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function newId(){ return Date.now()+'-'+Math.random().toString(36).slice(2,7); }
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function hhmm(d){ return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+$('fDate').value=today();
+
+/* ================= 書きかけの自動保存 ================= */
+let draftTimer=null;
+let lastDraft='';        /* 同じ内容を二度書かないため */
+let draftOnStore=false;  /* 控えが実際に保存されているか */
+function formEmpty(){
+  return !$('fClient').value.trim() && !$('fSite').value.trim() && !$('fWork').value.trim() && !$('fNote').value.trim() &&
+         !$('fStart').value && !$('fEnd').value && photos.length===0;
+}
+function queueDraft(){
+  clearTimeout(draftTimer);
+  draftTimer=setTimeout(()=>saveDraft(),5000);   /* 打ち終わって5秒 */
+}
+async function saveDraft(withPhotos){
+  if(formEmpty()){ await clearDraft(); return; }
+  const d={
+    date:$('fDate').value, client:$('fClient').value, site:$('fSite').value, work:$('fWork').value,
+    note:$('fNote').value,
+    start:$('fStart').value, end:$('fEnd').value, editId, ts:Date.now()
+  };
+  const body=JSON.stringify(d);
+  const cmp=body.replace(/,"ts":\d+/,'');
+  if(cmp!==lastDraft){
+    try{
+      await store.set(DKEY,body);
+      lastDraft=cmp; draftOnStore=true;
+      $('autoMsg').textContent='控えを取りました（'+hhmm(new Date())+'）';
+    }catch(e){ $('autoMsg').textContent='控えを取れませんでした'; }
+  }
+  if(withPhotos){
+    try{
+      if(photos.length) await store.set(DPKEY,JSON.stringify(photos.slice(0,CHUNK*2)));
+      else await store.del(DPKEY);
+    }catch(e){}
+  }
+}
+async function clearDraft(){
+  if(!draftOnStore&&!lastDraft){ $('autoMsg').textContent='入力は自動で控えを取っています'; return; }
+  try{ await store.del(DKEY); }catch(e){}
+  try{ await store.del(DPKEY); }catch(e){}
+  lastDraft=''; draftOnStore=false;
+  $('autoMsg').textContent='入力は自動で控えを取っています';
+}
+async function restoreDraft(){
+  let r=null;
+  try{ r=await store.get(DKEY); }catch(e){ return; }
+  if(!r||!r.value) return;
+  let d;
+  try{ d=JSON.parse(r.value); }catch(e){ return; }
+
+  $('fDate').value=d.date||today();
+  $('fClient').value=d.client||'';
+  $('fSite').value=d.site||'';
+  $('fWork').value=d.work||'';
+  $('fNote').value=d.note||'';
+  setMemo(!!(d.note||'').trim());
+  updMemoBtn();
+  $('fStart').value=d.start||'';
+  $('fEnd').value=d.end||'';
+  editId=(d.editId&&logs.some(l=>String(l.id)===String(d.editId)))?d.editId:null;
+  $('btnSave').textContent=editId?'更新する':'保存する';
+
+  try{
+    const p=await store.get(DPKEY);
+    if(p&&p.value) photos=JSON.parse(p.value);
+  }catch(e){}
+  drawPhotos();
+
+  draftOnStore=true;
+  lastDraft=r.value.replace(/,"ts":\d+/,'');
+  const w=d.ts?new Date(d.ts):null;
+  $('draftMsg').textContent='書きかけを戻しました'+(w?'（'+(w.getMonth()+1)+'/'+w.getDate()+' '+hhmm(w)+'）':'');
+  $('draftBar').hidden=false;
+}
+$('btnDropDraft').onclick=async()=>{
+  clearForm();
+  await clearDraft();
+  $('draftBar').hidden=true;
+  toast('書きかけを捨てました');
+};
+['fDate','fSite','fWork','fStart','fEnd'].forEach(id=>{
+  $(id).addEventListener('input',queueDraft);
+  $(id).addEventListener('change',queueDraft);
+});
+window.addEventListener('pagehide',()=>{ if(!formEmpty()) saveDraft(); });
+
+/* ================= 備考 ================= */
+function setMemo(open){
+  $('memoCard').hidden=!open;
+  $('btnMemoOpen').hidden=open;
+}
+function updMemoBtn(){
+  const has=!!$('fNote').value.trim();
+  $('btnMemoOpen').textContent=has?'備考あり（開く）':'＋ 備考を書く';
+  $('btnMemoOpen').classList.toggle('has',has);
+}
+$('btnMemoOpen').onclick=()=>{ setMemo(true); $('fNote').focus(); };
+$('btnMemoClose').onclick=()=>{ setMemo(false); updMemoBtn(); };
+$('fNote').addEventListener('input',()=>{ updMemoBtn(); queueDraft(); });
+
+/* ================= 写真 ================= */
+$('photoAdd').onclick=()=>$('fPhoto').click();
+$('fPhoto').onchange=e=>{
+  const files=[...e.target.files];
+  const room=MAX_PHOTOS-photos.length;
+  if(room<=0){ toast('写真は'+MAX_PHOTOS+'枚までです'); e.target.value=''; return; }
+  if(files.length>room) toast(room+'枚だけ追加します（上限'+MAX_PHOTOS+'枚）');
+  files.slice(0,room).forEach(f=>{
+    const rd=new FileReader();
+    rd.onload=ev=>shrink(ev.target.result,d=>{
+      if(photos.length>=MAX_PHOTOS) return;
+      photos.push(d); drawPhotos(); saveDraft(true);
+    });
+    rd.onerror=()=>toast('写真を読めませんでした',true);
+    rd.readAsDataURL(f);
+  });
+  e.target.value='';
+};
+function shrink(src,cb){
+  const img=new Image();
+  img.onload=()=>{
+    const max=900;
+    let w=img.width,h=img.height;
+    if(w>max||h>max){ if(w>h){h=Math.round(h*max/w);w=max;}else{w=Math.round(w*max/h);h=max;} }
+    const c=document.createElement('canvas');
+    c.width=w;c.height=h;
+    c.getContext('2d').drawImage(img,0,0,w,h);
+    cb(c.toDataURL('image/jpeg',0.7));
+  };
+  img.onerror=()=>toast('写真を読めませんでした',true);
+  img.src=src;
+}
+function drawPhotos(){
+  $('photoGrid').innerHTML=photos.map((p,i)=>
+    `<div class="photo-item"><img src="${p}" alt=""><button class="photo-del" data-idx="${i}" aria-label="削除">×</button></div>`
+  ).join('');
+  $('photoCount').textContent=photos.length?photos.length+'枚':'';
+  $('photoAdd').disabled=photos.length>=MAX_PHOTOS;
+}
+$('photoGrid').onclick=e=>{
+  const b=e.target.closest('.photo-del');
+  if(!b) return;
+  photos.splice(Number(b.dataset.idx),1);
+  drawPhotos();
+  saveDraft(true);
+};
+
+/* ================= 履歴チップ ================= */
+function chips(){
+  const cs=[];
+  logs.forEach(l=>{ if(l.client&&cs.indexOf(l.client)<0) cs.push(l.client); });
+  $('clientChips').innerHTML=cs.slice(0,12).map(c=>`<button class="chip" data-client="${esc(c)}">${esc(c)}</button>`).join('');
+
+  drawSiteChips();
+
+  const works=[];
+  logs.forEach(l=>{ if(l.work&&l.work.length<=14&&works.indexOf(l.work)<0) works.push(l.work); });
+  $('workChips').innerHTML=works.slice(0,8).map(w=>`<button class="chip" data-work="${esc(w)}">${esc(w)}</button>`).join('');
+
+  const times=[['08:00','17:00'],['08:00','12:00'],['13:00','17:00']];
+  $('timeChips').innerHTML=times.map(t=>`<button class="chip" data-a="${t[0]}" data-b="${t[1]}">${Number(t[0].slice(0,2))}:00〜${Number(t[1].slice(0,2))}:00</button>`).join('');
+}
+function drawSiteChips(){
+  const c=$('fClient').value.trim();
+  const seen=[],out=[];
+  logs.forEach(l=>{
+    if(!l.site) return;
+    if(c&&(l.client||'')!==c) return;
+    if(seen.indexOf(l.site)>=0) return;
+    seen.push(l.site); out.push(l);
+  });
+  const list=out.slice(0,12);
+  $('siteChips').innerHTML=list.map(l=>
+    `<button class="chip" data-site="${esc(l.site)}" data-client="${esc(l.client||'')}">${esc(l.site)}${(!c&&l.client)?`<i>${esc(l.client)}</i>`:''}</button>`
+  ).join('');
+  $('siteHint').textContent=c
+    ? (list.length?c+'の現場だけ出しています。':c+'の現場はまだありません。新しく入力してください。')
+    : '元請を選ぶと、その現場だけに絞られます。';
+}
+$('clientChips').onclick=e=>{
+  const c=e.target.closest('.chip'); if(!c) return;
+  $('fClient').value=c.dataset.client;
+  drawSiteChips(); queueDraft();
+};
+$('fClient').addEventListener('input',drawSiteChips);
+$('siteChips').onclick=e=>{
+  const c=e.target.closest('.chip'); if(!c) return;
+  $('fSite').value=c.dataset.site;
+  if(!$('fClient').value.trim()&&c.dataset.client){ $('fClient').value=c.dataset.client; drawSiteChips(); }
+  queueDraft();
+};
+$('workChips').onclick=e=>{
+  const c=e.target.closest('.chip'); if(!c) return;
+  const t=$('fWork');
+  t.value=t.value?t.value+'\n'+c.dataset.work:c.dataset.work;
+  queueDraft();
+};
+$('timeChips').onclick=e=>{
+  const c=e.target.closest('.chip'); if(!c) return;
+  $('fStart').value=c.dataset.a; $('fEnd').value=c.dataset.b;
+  queueDraft();
+};
+
+/* ================= 月フィルタ ================= */
+function monthOf(d){ return String(d||'').slice(0,7); }
+function monthLabel(m){ const p=m.split('-'); return p[0]+'年'+Number(p[1])+'月'; }
+function buildMonths(){
+  const ms=[...new Set(logs.map(l=>monthOf(l.date)).filter(Boolean))].sort().reverse();
+  if(curMonth&&ms.indexOf(curMonth)<0) curMonth='';
+  const html='<option value="">全期間</option>'+ms.map(m=>`<option value="${m}">${monthLabel(m)}</option>`).join('');
+  document.querySelectorAll('.mSel').forEach(s=>{ s.innerHTML=html; s.value=curMonth; });
+}
+document.querySelectorAll('.mSel').forEach(s=>{
+  s.onchange=()=>{
+    curMonth=s.value;
+    document.querySelectorAll('.mSel').forEach(x=>{ x.value=curMonth; });
+    render();
+  };
+});
+function scoped(){ return curMonth?logs.filter(l=>monthOf(l.date)===curMonth):logs; }
+
+/* ================= 一覧 ================= */
+let io=null;
+function byDateDesc(a,b){ return String(b.date).localeCompare(String(a.date)); }
+
+function render(){
+  chips();
+  buildMonths();
+  const q=($('qSearch').value||'').toLowerCase();
+  const base=scoped().filter(l=>!q||
+    (l.client||'').toLowerCase().indexOf(q)>=0||
+    (l.site||'').toLowerCase().indexOf(q)>=0||
+    (l.work||'').toLowerCase().indexOf(q)>=0||
+    (l.note||'').toLowerCase().indexOf(q)>=0);
+
+  const drafts=base.filter(l=>l.draft).sort(byDateDesc);
+  const done=base.filter(l=>!l.draft).sort(byDateDesc);
+
+  $('hdCount').textContent=logs.length?logs.length+'件':'';
+
+  const el=$('logList');
+  if(!base.length){
+    el.innerHTML='<div class="empty">'+(logs.length?'この条件の記録はありません':'まだ記録がありません。<br>「記録する」から始めてください。')+'</div>';
+  }else{
+    el.innerHTML=
+      (drafts.length?`<div class="sec-head">書きかけ ${drafts.length}件</div>`+drafts.map(card).join(''):'')+
+      (done.length?(drafts.length?`<div class="sec-head">記録済み ${done.length}件</div>`:'')+done.map(card).join(''):'');
+    observePhotos();
+  }
+  stats();
+}
+function card(l){
+  const t=(l.start||l.end)?`${esc(l.start)}〜${esc(l.end)}`:'';
+  const n=l.photoCount||0;
+  return `<div class="log${l.draft?' is-draft':''}">
+    <div class="log-head">
+      <span class="log-date">${fmtDate(l.date)}${l.draft?'<span class="draft-mark">下書き</span>':''}</span>
+      <span class="log-site">${l.site?esc(l.site):'現場未記入'}${l.client?`<i>${esc(l.client)}</i>`:''}</span>
+    </div>
+    <div class="log-body">
+      ${t?`<div class="log-time">${t}</div>`:''}
+      <div class="log-text${l.work?'':' none'}">${l.work?esc(l.work):'作業内容は未記入'}</div>
+      ${l.note?`<div class="log-note">${esc(l.note)}</div>`:''}
+      ${n?`<div class="log-photos" data-photos="${esc(l.id)}">${'<div class="ph-skel"></div>'.repeat(Math.min(n,6))}</div>`:''}
+    </div>
+    <div class="log-actions">
+      <button class="btn-sub" data-act="edit" data-id="${esc(l.id)}">続きを書く</button>
+      <button class="btn-sub" data-act="del" data-id="${esc(l.id)}">削除</button>
+    </div>
+  </div>`;
+}
+function observePhotos(){
+  if(io) io.disconnect();
+  if(!('IntersectionObserver' in window)){
+    document.querySelectorAll('[data-photos]').forEach(fillPhotos);
+    return;
+  }
+  io=new IntersectionObserver(es=>{
+    es.forEach(e=>{ if(e.isIntersecting){ io.unobserve(e.target); fillPhotos(e.target); } });
+  },{rootMargin:'300px'});
+  document.querySelectorAll('[data-photos]').forEach(el=>io.observe(el));
+}
+async function fillPhotos(box){
+  const id=box.dataset.photos;
+  const ps=await getPhotos(id);
+  if(!ps.length){ box.remove(); return; }
+  box.innerHTML=ps.map((p,i)=>`<img src="${p}" alt="" data-id="${esc(id)}" data-idx="${i}">`).join('');
+}
+$('logList').onclick=e=>{
+  const img=e.target.closest('.log-photos img');
+  if(img){ viewImg(img.dataset.id,Number(img.dataset.idx)); return; }
+  const b=e.target.closest('button[data-act]');
+  if(!b) return;
+  if(b.dataset.act==='edit') editLog(b.dataset.id);
+  else delLog(b.dataset.id);
+};
+function fmtDate(d){
+  if(!d) return '';
+  const p=String(d).split('-').map(Number);
+  if(!p[0]||!p[1]||!p[2]) return esc(d);
+  const w=['日','月','火','水','木','金','土'][new Date(p[0],p[1]-1,p[2]).getDay()];
+  return p[1]+'月'+p[2]+'日('+w+')';
+}
+
+/* ================= 写真ビューア ================= */
+async function viewImg(id,idx){
+  const ps=await getPhotos(id);
+  if(!ps.length) return;
+  let i=idx;
+  const v=document.createElement('div');
+  v.className='viewer';
+  v.innerHTML=`<img src="${ps[i]}" alt="">
+    <button class="vclose" aria-label="閉じる">×</button>
+    <div class="vbar">
+      <button class="vbtn prev">‹</button>
+      <span class="vnum"></span>
+      <button class="vbtn next">›</button>
+    </div>`;
+  const img=v.querySelector('img'), num=v.querySelector('.vnum');
+  const upd=()=>{ img.src=ps[i]; num.textContent=(i+1)+' / '+ps.length; };
+  upd();
+  if(ps.length<2) v.querySelector('.vbar').style.display='none';
+  v.querySelector('.prev').onclick=()=>{ i=(i-1+ps.length)%ps.length; upd(); };
+  v.querySelector('.next').onclick=()=>{ i=(i+1)%ps.length; upd(); };
+  const key=e=>{ if(e.key==='Escape') close(); };
+  const close=()=>{ v.remove(); document.removeEventListener('keydown',key); };
+  v.querySelector('.vclose').onclick=close;
+  v.onclick=e=>{ if(e.target===v) close(); };
+  document.addEventListener('keydown',key);
+  document.body.appendChild(v);
+}
+
+/* ================= 保存・編集・削除 ================= */
+$('btnSave').onclick=async()=>{
+  const btn=$('btnSave');
+  const date=$('fDate').value;
+  const client=$('fClient').value.trim();
+  const site=$('fSite').value.trim();
+  const work=$('fWork').value.trim();
+  const note=$('fNote').value.trim();
+  const st=$('fStart').value;
+  const en=$('fEnd').value;
+
+  if(!date&&!client&&!site&&!work&&!note&&photos.length===0){ toast('何か入力してください'); return; }
+
+  btn.disabled=true;
+  const prev=editId?logs.filter(l=>String(l.id)===String(editId))[0]:null;
+  const id=editId||newId();
+  const shot=photos.slice();
+
+  const okPhoto=await savePhotos(id,shot,prev);
+  if(!okPhoto) toast('写真を保存できませんでした（'+lastErr+'）',true);
+
+  const rec={
+    id, date:date||today(), client, site, work, note, start:st, end:en,
+    photoCount:okPhoto?shot.length:(prev?prev.photoCount||0:0),
+    c:1,
+    draft:!(site&&work)
+  };
+  if(editId) logs=logs.map(l=>String(l.id)===String(editId)?rec:l);
+  else logs.unshift(rec);
+
+  const ok=await saveLogs();
+  btn.disabled=false;
+  if(!ok) return;
+
+  editId=null;
+  clearForm();
+  await clearDraft();
+  $('draftBar').hidden=true;
+  render();
+  if(okPhoto) toast(rec.draft?'下書きとして保存しました':'保存しました');
+};
+
+function clearForm(){
+  $('fDate').value=today();
+  $('fClient').value='';
+  $('fSite').value='';
+  $('fWork').value='';
+  $('fNote').value='';
+  setMemo(false); updMemoBtn();
+  $('fStart').value='';
+  $('fEnd').value='';
+  photos=[]; drawPhotos();
+  editId=null;
+  $('btnSave').textContent='保存する';
+}
+$('btnClear').onclick=async()=>{
+  clearForm();
+  await clearDraft();
+  $('draftBar').hidden=true;
+  toast('クリアしました');
+};
+$('btnCopyLast').onclick=()=>{
+  if(!logs.length){ toast('まだ記録がありません'); return; }
+  const l=logs.slice().sort(byDateDesc)[0];
+  $('fClient').value=l.client||'';
+  $('fSite').value=l.site||'';
+  $('fStart').value=l.start||'';
+  $('fEnd').value=l.end||'';
+  $('fWork').value=l.work||'';
+  drawSiteChips();
+  queueDraft();
+  toast('前回の内容を入れました');
+};
+async function editLog(id){
+  const l=logs.filter(x=>String(x.id)===String(id))[0];
+  if(!l) return;
+  editId=l.id;
+  $('fDate').value=l.date;
+  $('fClient').value=l.client||'';
+  $('fSite').value=l.site||'';
+  $('fWork').value=l.work||'';
+  $('fNote').value=l.note||'';
+  setMemo(!!(l.note||'').trim());
+  updMemoBtn();
+  $('fStart').value=l.start||'';
+  $('fEnd').value=l.end||'';
+  photos=(await getPhotos(l.id)).slice();
+  drawPhotos();
+  $('btnSave').textContent='更新する';
+  $('draftBar').hidden=true;
+  document.querySelector('.tab[data-v=write]').click();
+  saveDraft();
+}
+async function delLog(id){
+  if(!confirm('この記録を削除します。よろしいですか。')) return;
+  const l=logs.filter(x=>String(x.id)===String(id))[0];
+  logs=logs.filter(x=>String(x.id)!==String(id));
+  await dropPhotos(id,l?l.photoCount:0);
+  await saveLogs();
+  if(String(editId)===String(id)){ clearForm(); await clearDraft(); $('draftBar').hidden=true; }
+  buildMonths();
+  render();
+  toast('削除しました');
+}
+$('qSearch').oninput=render;
+
+/* ================= 集計 ================= */
+function mins(l){
+  if(!l.start||!l.end) return 0;
+  const a=l.start.split(':').map(Number), b=l.end.split(':').map(Number);
+  let d=(b[0]*60+b[1])-(a[0]*60+a[1]);
+  if(d<0) d+=1440;
+  return d;
+}
+function hrs(m){ return m?Math.round(m/6)/10:0; }
+function stats(){
+  const set=scoped();
+  $('statScope').textContent=curMonth?monthLabel(curMonth):'全期間';
+  $('sDays').textContent=[...new Set(set.map(l=>l.date))].length;
+  $('sSites').textContent=[...new Set(set.map(l=>l.site).filter(Boolean))].length;
+  $('sPhotos').textContent=set.reduce((a,l)=>a+(l.photoCount||0),0);
+  $('sHours').textContent=hrs(set.reduce((a,l)=>a+mins(l),0))+'h';
+
+  const byC={},byS={};
+  set.forEach(l=>{
+    const c=l.client||'（元請未記入）';
+    if(!byC[c]) byC[c]={days:new Set(),min:0,sites:new Set()};
+    byC[c].days.add(l.date); byC[c].min+=mins(l);
+    if(l.site) byC[c].sites.add(l.site);
+
+    if(!l.site) return;
+    const k=l.site+'\u0000'+(l.client||'');
+    if(!byS[k]) byS[k]={site:l.site,client:l.client||'',days:new Set(),min:0};
+    byS[k].days.add(l.date); byS[k].min+=mins(l);
+  });
+
+  const ca=Object.entries(byC).sort((a,b)=>b[1].days.size-a[1].days.size);
+  $('clientStats').innerHTML=ca.length?
+    ca.map(([c,v])=>`<div class="srow"><span>${esc(c)}<i>現場${v.sites.size}</i></span><span>${v.days.size}日${v.min?' / '+hrs(v.min)+'h':''}</span></div>`).join('')
+    :'<div class="nodata">この期間の記録はありません</div>';
+
+  const sa=Object.values(byS).sort((a,b)=>b.days.size-a.days.size);
+  $('siteStats').innerHTML=sa.length?
+    sa.map(v=>`<div class="srow"><span>${esc(v.site)}${v.client?`<i>${esc(v.client)}</i>`:''}</span><span>${v.days.size}日${v.min?' / '+hrs(v.min)+'h':''}</span></div>`).join('')
+    :'<div class="nodata">この期間の記録はありません</div>';
+}
+
+/* ================= 書き出し ================= */
+$('btnExport').onclick=()=>{
+  const set=scoped();
+  if(!set.length){ toast('この期間の記録がありません'); return; }
+  const head=curMonth?monthLabel(curMonth)+'\n\n':'';
+  const txt=head+set.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(l=>{
+    const t=(l.start||l.end)?' '+(l.start||'')+'〜'+(l.end||''):'';
+    return l.date+t+' '+(l.client?l.client+' / ':'')+(l.site||'現場未記入')+'\n'+(l.work||'（作業内容未記入）')+(l.note?'\n【備考】'+l.note:'')+(l.photoCount?'\n［写真'+l.photoCount+'枚］':'');
+  }).join('\n\n────────\n\n');
+  dl('現場記録_'+(curMonth||today())+'.txt',txt,'text/plain');
+  toast((curMonth?monthLabel(curMonth):'全期間')+'を書き出しました');
+};
+$('btnBackup').onclick=async()=>{
+  if(!logs.length){ toast('記録がありません'); return; }
+  const btn=$('btnBackup');
+  btn.disabled=true; toast('写真を集めています…');
+  const ph={};
+  for(const l of logs){
+    if(l.photoCount){ const ps=await getPhotos(l.id); if(ps.length) ph[l.id]=ps; }
+  }
+  dl('現場記録バックアップ_'+today()+'.json',JSON.stringify({v:2,logs:logs,photos:ph}),'application/json');
+  btn.disabled=false;
+  toast('バックアップを保存しました');
+};
+$('btnRestore').onclick=()=>$('fRestore').click();
+$('fRestore').onchange=e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=async ev=>{
+    try{
+      const d=JSON.parse(ev.target.result);
+      const inLogs=Array.isArray(d)?d:d.logs;
+      const inPh=Array.isArray(d)?null:(d.photos||{});
+      if(!Array.isArray(inLogs)) throw 0;
+      if(!confirm(inLogs.length+'件の記録を読み込みます。今の記録に追加されます。')) return;
+
+      const ids=new Set(logs.map(l=>String(l.id)));
+      let added=0,ng=0;
+      for(const x of inLogs){
+        if(ids.has(String(x.id))) continue;
+        const id=x.id||newId();
+        let ps=Array.isArray(x.photos)?x.photos:((inPh&&inPh[x.id])?inPh[x.id]:[]);
+        ps=ps.slice(0,MAX_PHOTOS);
+        if(ps.length){ const ok=await savePhotos(id,ps,null); if(!ok){ ng++; ps=[]; } }
+        logs.push({
+          id, date:x.date||today(), client:x.client||'', site:x.site||'', work:x.work||'', note:x.note||'',
+          start:x.start||'', end:x.end||'',
+          photoCount:ps.length, c:1, draft:!(x.site&&x.work)
+        });
+        added++;
+      }
+      await saveLogs();
+      buildMonths();
+      render();
+      toast(added+'件を復元しました'+(ng?'（写真'+ng+'件は入りませんでした）':''));
+    }catch(err){ toast('ファイルを読めませんでした',true); }
+  };
+  r.readAsText(f);
+  e.target.value='';
+};
+function dl(name,data,type){
+  const b=new Blob([data],{type});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(b);a.download=name;a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+
+/* ================= 気づきメモ ================= */
+const NKEY='genba_notes';
+let noteTimer=null;
+async function loadNotes(){
+  try{
+    const r=await store.get(NKEY);
+    if(r&&r.value) $('notes').value=r.value;
+  }catch(e){}
+}
+$('notes').addEventListener('input',()=>{
+  clearTimeout(noteTimer);
+  $('notesSaved').textContent='…';
+  noteTimer=setTimeout(async()=>{
+    try{
+      await store.set(NKEY,$('notes').value);
+      $('notesSaved').textContent='保存済 '+hhmm(new Date());
+    }catch(e){ $('notesSaved').textContent='保存できず'; }
+  },5000);
+});
+
+drawPhotos();
+(async()=>{
+  await store.init();
+  showMode();
+  await load();
+  await loadNotes();
+})();
+</script>
+</body>
+</html>
