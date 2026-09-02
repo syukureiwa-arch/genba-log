@@ -1,6 +1,56 @@
+# ============================================================
+# 記録そのものは絶対にここへ置かない／pushしない。
+# 現場の記録は端末の中だけにあるべきもので、リポジトリは公開されている。
+# ============================================================
+
+# アプリが書き出すバックアップ（写真込み。中身は記録そのもの）
+現場記録バックアップ_*.json
+*バックアップ*.json
+*backup*.json
+*Backup*.json
+*BACKUP*.json
+
+# アプリが書き出すテキスト
+現場記録_*.txt
+
+# 手で退避した時の置き場
+/backup/
+/backups/
+/data/
+/photos/
+/写真/
+/記録/
+
+# 写真そのもの（アイコンは名前で許可する）
+*.jpg
+*.jpeg
+*.heic
+*.HEIC
+!icon-*.png
+
+# 旧版の退避ファイル
+*.bak
+*.bak-*
+*.orig
+*.rej
+*~
+
+# 秘密情報
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+credentials.json
+secrets.json
+
+# OS・エディタ・ツール
 node_modules/
 *.log
-Thumb.db
 Thumbs.db
+Thumb.db
 .DS_Store
 desktop.ini
+.vscode/
+.idea/
