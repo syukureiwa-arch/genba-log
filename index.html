@@ -114,6 +114,47 @@ button:focus-visible{outline:2px solid var(--trowel);outline-offset:2px}
 /* ---- 備考 ---- */
 .memo-open{width:100%;margin-bottom:12px;text-align:center}
 .memo-open.has{background:#FBF3E2;border-color:var(--draft);color:#6A4E19;font-weight:600}
+
+/* ---- 材料 ---- */
+.open-row{display:flex;gap:8px;margin-bottom:12px}
+.open-row .memo-open{margin-bottom:0;flex:1 1 0;min-width:0;padding:11px 8px}
+.mat-row{
+  position:relative;background:var(--white);
+  border:1px solid var(--line);border-radius:8px;
+  padding:9px 42px 9px 9px;margin-bottom:8px;
+}
+.mat-row input{font-size:15px;padding:9px 10px}
+.mat-row .mat-name{margin-bottom:6px}
+.mat-nums{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:6px}
+.mat-del{
+  position:absolute;top:50%;right:8px;transform:translateY(-50%);
+  width:30px;height:30px;border-radius:7px;
+  background:var(--paper-deep);color:var(--ink-soft);font-size:18px;line-height:1;
+}
+.mat-del:active{background:var(--mortar-light)}
+.chip-lab{font-size:11px;color:var(--ink-soft);margin-top:11px}
+
+/* ---- 一覧の材料 ---- */
+.log-mat{margin-top:10px;border:1px solid var(--line);border-radius:7px;background:var(--white)}
+.log-mat>summary{
+  padding:9px 11px;font-size:13px;font-weight:700;color:var(--ink-soft);
+  cursor:pointer;list-style:none;
+}
+.log-mat>summary::-webkit-details-marker{display:none}
+.log-mat>summary::after{content:"▾";float:right;color:var(--mortar)}
+.log-mat[open]>summary::after{content:"▴"}
+.mat-list{padding:0 11px 9px}
+.mat-item,.mat-sum{
+  display:flex;justify-content:space-between;gap:10px;
+  padding:7px 0;font-size:13px;border-top:1px solid var(--line);
+}
+.mat-item>span:last-child{color:var(--ink-soft);white-space:nowrap}
+.mat-sum{font-weight:700}
+
+/* ---- 集計の材料 ---- */
+.mat-stat-row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px}
+.mat-stat-row>span:last-child{white-space:nowrap;color:var(--ink-soft)}
+.mat-stat-total{display:flex;justify-content:space-between;padding:10px 0 0;font-weight:700;font-size:14px}
 .lnk{background:none;color:var(--ink-soft);text-decoration:underline;font-size:12px;padding:2px}
 .log-note{
   margin-top:10px;padding:9px 11px;
@@ -346,7 +387,10 @@ button{font-family:inherit;cursor:pointer;border:none}
     </div>
   </div>
 
-  <button class="btn-sub memo-open" id="btnMemoOpen">＋ 備考を書く</button>
+  <div class="open-row">
+    <button class="btn-sub memo-open" id="btnMemoOpen">＋ 備考を書く</button>
+    <button class="btn-sub memo-open" id="btnMatOpen">＋ 材料を入れる</button>
+  </div>
   <div class="card" id="memoCard" hidden>
     <div class="card-head">
       <span>備考</span>
@@ -355,6 +399,22 @@ button{font-family:inherit;cursor:pointer;border:none}
     <div class="card-body">
       <label class="sr" for="fNote">備考</label>
       <textarea id="fNote" placeholder="イレギュラー、受けた指示、次回への申し送り、考えたこと"></textarea>
+    </div>
+  </div>
+
+  <div class="card" id="matCard" hidden>
+    <div class="card-head">
+      <span>材料</span>
+      <button class="lnk" id="btnMatClose">閉じる</button>
+    </div>
+    <div class="card-body">
+      <div id="matRows"></div>
+      <button class="btn-sub" id="btnMatAdd" style="width:100%">＋ もう1行</button>
+      <p class="chip-lab" id="matNameLab" hidden>よく使う品名</p>
+      <div class="chips" id="matNameChips"></div>
+      <p class="chip-lab" id="matUnitLab" hidden>よく使う単位</p>
+      <div class="chips" id="matUnitChips"></div>
+      <p class="hint">金額は空のままで構いません。品名や単位を押すと、入力中の行に入ります。</p>
     </div>
   </div>
 
@@ -413,6 +473,15 @@ button{font-family:inherit;cursor:pointer;border:none}
   <div class="card">
     <div class="card-head"><span>現場ごと</span></div>
     <div class="card-body" id="siteStats"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span>現場ごとの材料</span></div>
+    <div class="card-body">
+      <label class="sr" for="matSite">現場を選ぶ</label>
+      <select id="matSite"></select>
+      <div id="matStats" style="margin-top:10px"></div>
+    </div>
   </div>
 
   <div class="card">
@@ -762,7 +831,8 @@ async function migrate(){
     logs.push({
       id, date:l.date||today(), client:l.client||'', site:l.site||'', work:l.work||'', note:l.note||'',
       start:l.start||'', end:l.end||'',
-      photoCount:ps.length, c:1, draft:!(l.site&&l.work)
+      photoCount:ps.length, c:1,
+      materials:normMats(l.materials), draft:isDraft(l.site,l.work,normMats(l.materials))
     });
   }
   if(await saveLogs()){
@@ -808,7 +878,7 @@ let lastDraft='';        /* 同じ内容を二度書かないため */
 let draftOnStore=false;  /* 控えが実際に保存されているか */
 function formEmpty(){
   return !$('fClient').value.trim() && !$('fSite').value.trim() && !$('fWork').value.trim() && !$('fNote').value.trim() &&
-         !$('fStart').value && !$('fEnd').value && photos.length===0;
+         !$('fStart').value && !$('fEnd').value && photos.length===0 && matCount()===0;
 }
 function queueDraft(){
   clearTimeout(draftTimer);
@@ -819,7 +889,9 @@ async function saveDraft(withPhotos){
   const d={
     date:$('fDate').value, client:$('fClient').value, site:$('fSite').value, work:$('fWork').value,
     note:$('fNote').value,
-    start:$('fStart').value, end:$('fEnd').value, editId, ts:Date.now()
+    start:$('fStart').value, end:$('fEnd').value,
+    materials:normMats(matRows),
+    editId, ts:Date.now()
   };
   const body=JSON.stringify(d);
   const cmp=body.replace(/,"ts":\d+/,'');
@@ -857,6 +929,8 @@ async function restoreDraft(){
   $('fWork').value=d.work||'';
   $('fNote').value=d.note||'';
   setMemo(!!(d.note||'').trim());
+  matRows=normMats(d.materials); if(!matRows.length) matRows=[blankMat()];
+  matFocus=0; drawMatRows(); setMat(matCount()>0); updMatBtn();
   updMemoBtn();
   $('fStart').value=d.start||'';
   $('fEnd').value=d.end||'';
@@ -960,6 +1034,17 @@ function chips(){
   logs.forEach(l=>{ if(l.work&&l.work.length<=14&&works.indexOf(l.work)<0) works.push(l.work); });
   $('workChips').innerHTML=works.slice(0,8).map(w=>`<button class="chip" data-work="${esc(w)}">${esc(w)}</button>`).join('');
 
+  const mnames=[],munits=[];
+  logs.forEach(l=>mats(l).forEach(m=>{
+    if(m.name&&m.name.length<=14&&mnames.indexOf(m.name)<0) mnames.push(m.name);
+    if(m.unit&&munits.indexOf(m.unit)<0) munits.push(m.unit);
+  }));
+  const mn=mnames.slice(0,10), mu=munits.slice(0,10);
+  $('matNameChips').innerHTML=mn.map(n=>'<button class="chip" data-mat-name="'+esc(n)+'">'+esc(n)+'</button>').join('');
+  $('matUnitChips').innerHTML=mu.map(u=>'<button class="chip" data-mat-unit="'+esc(u)+'">'+esc(u)+'</button>').join('');
+  $('matNameLab').hidden=!mn.length;
+  $('matUnitLab').hidden=!mu.length;
+
   const times=[['08:00','17:00'],['08:00','12:00'],['13:00','17:00']];
   $('timeChips').innerHTML=times.map(t=>`<button class="chip" data-a="${t[0]}" data-b="${t[1]}">${Number(t[0].slice(0,2))}:00〜${Number(t[1].slice(0,2))}:00</button>`).join('');
 }
@@ -1034,7 +1119,8 @@ function render(){
     (l.client||'').toLowerCase().indexOf(q)>=0||
     (l.site||'').toLowerCase().indexOf(q)>=0||
     (l.work||'').toLowerCase().indexOf(q)>=0||
-    (l.note||'').toLowerCase().indexOf(q)>=0);
+    (l.note||'').toLowerCase().indexOf(q)>=0||
+    mats(l).some(m=>(m.name||'').toLowerCase().indexOf(q)>=0));
 
   const drafts=base.filter(l=>l.draft).sort(byDateDesc);
   const done=base.filter(l=>!l.draft).sort(byDateDesc);
@@ -1065,6 +1151,7 @@ function card(l){
       ${t?`<div class="log-time">${t}</div>`:''}
       <div class="log-text${l.work?'':' none'}">${l.work?esc(l.work):'作業内容は未記入'}</div>
       ${l.note?`<div class="log-note">${esc(l.note)}</div>`:''}
+      ${matBlock(l)}
       ${n?`<div class="log-photos" data-photos="${esc(l.id)}">${'<div class="ph-skel"></div>'.repeat(Math.min(n,6))}</div>`:''}
     </div>
     <div class="log-actions">
@@ -1142,10 +1229,11 @@ $('btnSave').onclick=async()=>{
   const site=$('fSite').value.trim();
   const work=$('fWork').value.trim();
   const note=$('fNote').value.trim();
+  const materials=normMats(matRows);
   const st=$('fStart').value;
   const en=$('fEnd').value;
 
-  if(!date&&!client&&!site&&!work&&!note&&photos.length===0){ toast('何か入力してください'); return; }
+  if(!date&&!client&&!site&&!work&&!note&&!materials.length&&photos.length===0){ toast('何か入力してください'); return; }
 
   btn.disabled=true;
   const prev=editId?logs.filter(l=>String(l.id)===String(editId))[0]:null;
@@ -1159,7 +1247,8 @@ $('btnSave').onclick=async()=>{
     id, date:date||today(), client, site, work, note, start:st, end:en,
     photoCount:okPhoto?shot.length:(prev?prev.photoCount||0:0),
     c:1,
-    draft:!(site&&work)
+    materials,
+    draft:isDraft(site,work,materials)
   };
   if(editId) logs=logs.map(l=>String(l.id)===String(editId)?rec:l);
   else logs.unshift(rec);
@@ -1183,6 +1272,7 @@ function clearForm(){
   $('fWork').value='';
   $('fNote').value='';
   setMemo(false); updMemoBtn();
+  matRows=[blankMat()]; matFocus=0; drawMatRows(); setMat(false); updMatBtn();
   $('fStart').value='';
   $('fEnd').value='';
   photos=[]; drawPhotos();
@@ -1217,6 +1307,8 @@ async function editLog(id){
   $('fWork').value=l.work||'';
   $('fNote').value=l.note||'';
   setMemo(!!(l.note||'').trim());
+  matRows=normMats(l.materials); if(!matRows.length) matRows=[blankMat()];
+  matFocus=0; drawMatRows(); setMat(matCount()>0); updMatBtn();
   updMemoBtn();
   $('fStart').value=l.start||'';
   $('fEnd').value=l.end||'';
@@ -1279,6 +1371,7 @@ function stats(){
   $('siteStats').innerHTML=sa.length?
     sa.map(v=>`<div class="srow"><span>${esc(v.site)}${v.client?`<i>${esc(v.client)}</i>`:''}</span><span>${v.days.size}日${v.min?' / '+hrs(v.min)+'h':''}</span></div>`).join('')
     :'<div class="nodata">この期間の記録はありません</div>';
+  matStats();
 }
 
 /* ================= 書き出し ================= */
@@ -1288,7 +1381,14 @@ $('btnExport').onclick=()=>{
   const head=curMonth?monthLabel(curMonth)+'\n\n':'';
   const txt=head+set.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(l=>{
     const t=(l.start||l.end)?' '+(l.start||'')+'〜'+(l.end||''):'';
-    return l.date+t+' '+(l.client?l.client+' / ':'')+(l.site||'現場未記入')+'\n'+(l.work||'（作業内容未記入）')+(l.note?'\n【備考】'+l.note:'')+(l.photoCount?'\n［写真'+l.photoCount+'枚］':'');
+    const ms=mats(l);
+    const sub=matSubtotal(ms);
+    const matTxt=ms.length?('\n【材料】\n'+ms.map(m=>{
+      const amount=String(m.qty||'').trim()+String(m.unit||'').trim();
+      const price=String(m.price||'').trim()!==''?' '+yen(m.price):'';
+      return '  '+(m.name||'（品名なし）')+(amount?' '+amount:'')+price;
+    }).join('\n')+(sub!==null?'\n  小計 '+yen(sub):'')):'';
+    return l.date+t+' '+(l.client?l.client+' / ':'')+(l.site||'現場未記入')+'\n'+(l.work||'（作業内容未記入）')+(l.note?'\n【備考】'+l.note:'')+matTxt+(l.photoCount?'\n［写真'+l.photoCount+'枚］':'');
   }).join('\n\n────────\n\n');
   dl('現場記録_'+(curMonth||today())+'.txt',txt,'text/plain');
   toast((curMonth?monthLabel(curMonth):'全期間')+'を書き出しました');
@@ -1368,7 +1468,8 @@ $('fRestore').onchange=e=>{
         logs.push({
           id, date:x.date||today(), client:x.client||'', site:x.site||'', work:x.work||'', note:x.note||'',
           start:x.start||'', end:x.end||'',
-          photoCount:ps.length, c:1, draft:!(x.site&&x.work)
+          photoCount:ps.length, c:1,
+          materials:normMats(x.materials), draft:isDraft(x.site,x.work,normMats(x.materials))
         });
         ids.add(String(id));
         added++;
@@ -1393,6 +1494,191 @@ function dl(name,data,type){
   const a=document.createElement('a');
   a.href=URL.createObjectURL(b);a.download=name;a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+
+/* ================= 材料 =================
+   記録1件につき materials:[{name,qty,unit,price}] を持つ。
+   price は空文字可。qty も含めて入力されたままの文字列で持ち、
+   集計する時だけ数として読む（「少々」のような書き方を殺さないため）。
+   古い記録には materials が無いので、読む時は必ず mats() を通すこと。
+========================================== */
+function mats(l){ return (l&&Array.isArray(l.materials))?l.materials:[]; }
+function blankMat(){ return {name:'',qty:'',unit:'',price:''}; }
+function matEmpty(m){
+  return !String(m.name||'').trim() && !String(m.qty||'').trim()
+      && !String(m.unit||'').trim() && !String(m.price||'').trim();
+}
+/* 何が入ってくるか判らない（古いバックアップ等）ので、ここで形を揃える */
+function normMats(v){
+  if(!Array.isArray(v)) return [];
+  const out=[];
+  for(const m of v){
+    if(!m||typeof m!=='object') continue;
+    const r={
+      name:String(m.name==null?'':m.name).trim(),
+      qty:String(m.qty==null?'':m.qty).trim(),
+      unit:String(m.unit==null?'':m.unit).trim(),
+      price:String(m.price==null?'':m.price).trim()
+    };
+    if(!matEmpty(r)) out.push(r);
+  }
+  return out;
+}
+/* 現場があって、作業内容か材料のどちらかがあれば下書きではない。
+   材料だけ届く日が稀にあるので、それを下書き扱いにしない */
+function isDraft(site,work,materials){
+  return !(String(site||'').trim() && (String(work||'').trim()||(materials&&materials.length)));
+}
+function numOf(v){
+  const x=parseFloat(String(v==null?'':v).replace(/[^0-9.-]/g,''));
+  return isFinite(x)?x:0;
+}
+function fmtQty(n){ return String(Math.round(n*100)/100); }
+function yen(v){ return '¥'+numOf(v).toLocaleString('ja-JP'); }
+/* 金額が1つでも入っていれば小計を返す。全部空なら null */
+function matSubtotal(ms){
+  let sum=0,has=false;
+  ms.forEach(m=>{ if(String(m.price||'').trim()!==''){ sum+=numOf(m.price); has=true; } });
+  return has?sum:null;
+}
+
+let matRows=[blankMat()];
+let matFocus=0;          /* チップを押した時に入れる行 */
+
+function drawMatRows(){
+  if(!matRows.length) matRows=[blankMat()];
+  $('matRows').innerHTML=matRows.map((m,i)=>
+    '<div class="mat-row">'
+     +'<input type="text" class="mat-name" data-f="name" data-i="'+i+'" placeholder="品名" value="'+esc(m.name)+'">'
+     +'<div class="mat-nums">'
+       +'<input type="text" class="mat-qty" data-f="qty" data-i="'+i+'" inputmode="decimal" placeholder="数量" value="'+esc(m.qty)+'">'
+       +'<input type="text" class="mat-unit" data-f="unit" data-i="'+i+'" placeholder="単位" value="'+esc(m.unit)+'">'
+       +'<input type="text" class="mat-price" data-f="price" data-i="'+i+'" inputmode="numeric" placeholder="金額" value="'+esc(m.price)+'">'
+     +'</div>'
+     +'<button type="button" class="mat-del" data-del="'+i+'" aria-label="この行を消す">&times;</button>'
+    +'</div>'
+  ).join('');
+}
+function setMat(open){
+  $('matCard').hidden=!open;
+  $('btnMatOpen').hidden=open;
+}
+function matCount(){ return matRows.filter(m=>!matEmpty(m)).length; }
+function updMatBtn(){
+  const n=matCount();
+  $('btnMatOpen').textContent=n?'材料'+n+'件（開く）':'＋ 材料を入れる';
+  $('btnMatOpen').classList.toggle('has',!!n);
+}
+/* 入力中の行にチップの中身を入れる。どこにも触っていなければ最後の行へ */
+function setMatField(f,v){
+  let i=matFocus;
+  if(!(i>=0&&i<matRows.length)) i=matRows.length-1;
+  matRows[i][f]=v;
+  const el=$('matRows').querySelector('input[data-f="'+f+'"][data-i="'+i+'"]');
+  if(el) el.value=v;
+  updMatBtn(); queueDraft();
+}
+
+$('btnMatOpen').onclick=()=>{
+  setMat(true);
+  const el=$('matRows').querySelector('input[data-f="name"]');
+  if(el) el.focus();
+};
+$('btnMatClose').onclick=()=>{ setMat(false); updMatBtn(); };
+$('btnMatAdd').onclick=()=>{
+  matRows.push(blankMat());
+  drawMatRows();
+  const els=$('matRows').querySelectorAll('input[data-f="name"]');
+  if(els.length) els[els.length-1].focus();
+  queueDraft();
+};
+/* 打つたびに描き直すとフォーカスが飛ぶので、値だけ控える */
+$('matRows').addEventListener('input',e=>{
+  const el=e.target.closest('input[data-f]');
+  if(!el) return;
+  const i=Number(el.dataset.i);
+  if(!matRows[i]) return;
+  matRows[i][el.dataset.f]=el.value;
+  updMatBtn(); queueDraft();
+});
+$('matRows').addEventListener('focusin',e=>{
+  const el=e.target.closest('input[data-f]');
+  if(el) matFocus=Number(el.dataset.i);
+});
+$('matRows').addEventListener('click',e=>{
+  const b=e.target.closest('.mat-del');
+  if(!b) return;
+  matRows.splice(Number(b.dataset.del),1);
+  if(!matRows.length) matRows=[blankMat()];
+  matFocus=Math.min(matFocus,matRows.length-1);
+  drawMatRows(); updMatBtn(); queueDraft();
+});
+$('matNameChips').onclick=e=>{
+  const c=e.target.closest('.chip'); if(!c) return;
+  setMatField('name',c.dataset.matName);
+};
+$('matUnitChips').onclick=e=>{
+  const c=e.target.closest('.chip'); if(!c) return;
+  setMatField('unit',c.dataset.matUnit);
+};
+
+/* ---- 集計：現場ごとの材料 ---- */
+function matStats(){
+  const sel=$('matSite');
+  const sites=[...new Set(scoped().filter(l=>l.site&&mats(l).length).map(l=>l.site))].sort();
+  const cur=sel.value;
+  sel.innerHTML=sites.length
+    ? sites.map(s=>'<option value="'+esc(s)+'">'+esc(s)+'</option>').join('')
+    : '<option value="">（材料の記録がありません）</option>';
+  if(sites.indexOf(cur)>=0) sel.value=cur;
+  drawMatStats();
+}
+function drawMatStats(){
+  const site=$('matSite').value;
+  const box=$('matStats');
+  if(!site){ box.innerHTML='<div class="nodata">この期間に材料の記録はありません</div>'; return; }
+  /* 同じ品名でも単位が違えば足せないので、品名＋単位でまとめる */
+  const agg={};
+  let total=0,hasPrice=false;
+  scoped().forEach(l=>{
+    if(l.site!==site) return;
+    mats(l).forEach(m=>{
+      const name=m.name||'（品名なし）';
+      const k=name+' '+(m.unit||'');
+      if(!agg[k]) agg[k]={name:name,unit:m.unit||'',qty:0,price:0,hasPrice:false};
+      agg[k].qty+=numOf(m.qty);
+      if(String(m.price||'').trim()!==''){
+        const p=numOf(m.price);
+        agg[k].price+=p; agg[k].hasPrice=true;
+        total+=p; hasPrice=true;
+      }
+    });
+  });
+  const rows=Object.values(agg).sort((a,b)=>b.qty-a.qty);
+  if(!rows.length){ box.innerHTML='<div class="nodata">この現場の材料はありません</div>'; return; }
+  box.innerHTML=rows.map(r=>
+      '<div class="mat-stat-row"><span>'+esc(r.name)+'</span><span>'
+      +fmtQty(r.qty)+esc(r.unit)+(r.hasPrice?' / '+yen(r.price):'')+'</span></div>'
+    ).join('')
+    +(hasPrice?'<div class="mat-stat-total"><span>金額合計</span><span>'+yen(total)+'</span></div>':'');
+}
+$('matSite').onchange=drawMatStats;
+
+/* 一覧カードの中の材料。畳んだ状態で出す */
+function matBlock(l){
+  const ms=mats(l);
+  if(!ms.length) return '';
+  const sub=matSubtotal(ms);
+  const items=ms.map(m=>{
+    const amount=String(m.qty||'').trim()+String(m.unit||'').trim();
+    const right=[amount].filter(s=>s!=='')
+      .concat(String(m.price||'').trim()!==''?[yen(m.price)]:[]).join(' / ');
+    return '<div class="mat-item"><span>'+esc(m.name||'（品名なし）')+'</span><span>'+esc(right)+'</span></div>';
+  }).join('');
+  return '<details class="log-mat"><summary>材料 '+ms.length+'件</summary><div class="mat-list">'
+    +items
+    +(sub!==null?'<div class="mat-sum"><span>小計</span><span>'+yen(sub)+'</span></div>':'')
+    +'</div></details>';
 }
 
 /* ================= バックアップの催促 =================
@@ -1487,6 +1773,7 @@ if("serviceWorker" in navigator){
 }
 
 drawPhotos();
+drawMatRows(); updMatBtn();
 (async()=>{
   await store.init();
   showMode();
