@@ -4,6 +4,11 @@ const fs=require('fs'), vm=require('vm'), path=require('path');
 const SWPATH=process.argv[2]||require('path').join(__dirname,'sw.js');
 const SW=fs.readFileSync(SWPATH,'utf8');
 const ORIGIN='https://example.test';
+/* 期待するキャッシュ名は sw.js の VERSION から組み立てる */
+const VER=(SW.split("const VERSION='")[1]||'').split("'")[0];
+if(!VER){ console.error('sw.js から VERSION を読み取れません'); process.exit(1); }
+const CACHE_NAME='genba-log-'+VER;
+const OLD_CACHE='genba-log-__old__';
 
 let pass=0,fail=0;
 const ok=(c,m)=>{ if(c){pass++;console.log('  ok   '+m);} else {fail++;console.log('  FAIL '+m);} };
@@ -71,17 +76,17 @@ const fire=async(env,type,extra)=>{ const e={...evt(),...extra}; await env.handl
   await fire(env,'install');
   const cacheName=[...env.store.keys()][0];
   const cached=[...env.store.get(cacheName).keys()].map(u=>new URL(u).pathname).sort();
-  ok(cacheName==='genba-log-v1','キャッシュ名が genba-log-v1 ('+cacheName+')');
+  ok(cacheName===CACHE_NAME,'キャッシュ名が '+CACHE_NAME+' ('+cacheName+')');
   ok(JSON.stringify(cached)===JSON.stringify([...ASSETS].sort()),'5件とも入った: '+cached.join(' '));
   ok(env.skipWaited===true,'skipWaiting が呼ばれる');
 
   console.log('\n[2] activate で古い版のキャッシュだけ消す');
-  env.store.set('genba-log-v0',new Map([['x',{body:'old'}]]));
+  env.store.set(OLD_CACHE,new Map([['x',{body:'old'}]]));
   env.store.set('other-app-cache',new Map([['y',{body:'keep'}]]));
   await fire(env,'activate');
   const left=[...env.store.keys()].sort();
-  ok(!left.includes('genba-log-v0'),'古い genba-log-v0 は消える');
-  ok(left.includes('genba-log-v1'),'今の版は残る');
+  ok(!left.includes(OLD_CACHE),'古い '+OLD_CACHE+' は消える');
+  ok(left.includes(CACHE_NAME),'今の版 '+CACHE_NAME+' は残る');
   ok(left.includes('other-app-cache'),'関係ないキャッシュは触らない');
   ok(env.claimed===true,'clients.claim が呼ばれる');
 

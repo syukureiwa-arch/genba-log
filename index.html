@@ -98,6 +98,19 @@ button:focus-visible{outline:2px solid var(--trowel);outline-offset:2px}
 .modebar.ok{background:#FBF3E2;color:#6A4E19;border-bottom:1px solid var(--draft)}
 .modebar.ng{background:var(--warn);color:#fff}
 
+/* ---- バックアップの催促 ---- */
+.backupbar{
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  padding:11px 14px;font-size:13px;line-height:1.6;
+  background:#FBF3E2;color:#6A4E19;border-bottom:1px solid var(--draft);
+}
+.backupbar .bb-msg{flex:1 1 190px;font-weight:700}
+.backupbar button{
+  flex:0 0 auto;font-size:13px;font-weight:700;padding:8px 13px;border-radius:7px;
+  background:var(--white);color:#6A4E19;border:1px solid var(--draft);
+}
+.backupbar button.bb-go{background:var(--trowel);border-color:var(--trowel);color:#fff}
+
 /* ---- 備考 ---- */
 .memo-open{width:100%;margin-bottom:12px;text-align:center}
 .memo-open.has{background:#FBF3E2;border-color:var(--draft);color:#6A4E19;font-weight:600}
@@ -268,6 +281,7 @@ button{font-family:inherit;cursor:pointer;border:none}
 </header>
 
 <div class="modebar" id="modeBar" hidden></div>
+<div class="backupbar" id="backupBar" hidden></div>
 
 <!-- ========== 記録する ========== -->
 <div class="view on" id="v-write">
@@ -408,6 +422,7 @@ button{font-family:inherit;cursor:pointer;border:none}
       <button class="btn-sub" id="btnBackup" style="width:100%;margin-bottom:8px">バックアップを保存（写真つき・全期間）</button>
       <input type="file" id="fRestore" accept=".json" style="display:none">
       <button class="btn-sub" id="btnRestore" style="width:100%">バックアップから復元</button>
+      <p class="hint" id="backupInfo"></p>
       <p class="hint">書き出しは上で選んだ月の分だけ出ます。記録はこの端末の中だけに保存されます。機種変更の前は必ずバックアップを取ってください。</p>
     </div>
   </div>
@@ -452,6 +467,11 @@ const DKEY='genba_draft';
 const DPKEY='genba_draft_photos';
 const NKEY='genba_notes';
 const MIGKEY='genba_migrated';   /* 旧保存先からの取り込み済みの印 */
+const BKEY='genba_backup_at';    /* 最後にバックアップを取った時刻 */
+const BSKEY='genba_backup_snooze'; /* 「後で」を押した時、いつまで黙るか */
+const FUKEY='genba_first_use';   /* 使い始めた時刻。一度もバックアップが無い時の基準 */
+const BACKUP_DAYS=14;            /* この日数を過ぎたら催促する */
+const SNOOZE_DAYS=3;             /* 「後で」で黙る日数 */
 const MAX_PHOTOS=30;
 const CHUNK=3;              /* 写真は3枚ずつ分けて保存 */
 const MAX_BYTES=4200000;
@@ -1031,6 +1051,7 @@ function render(){
     observePhotos();
   }
   stats();
+  updBackupBar();
 }
 function card(l){
   const t=(l.start||l.end)?`${esc(l.start)}〜${esc(l.end)}`:'';
@@ -1272,18 +1293,32 @@ $('btnExport').onclick=()=>{
   dl('現場記録_'+(curMonth||today())+'.txt',txt,'text/plain');
   toast((curMonth?monthLabel(curMonth):'全期間')+'を書き出しました');
 };
-$('btnBackup').onclick=async()=>{
-  if(!logs.length){ toast('記録がありません'); return; }
+async function doBackup(){
+  if(!logs.length){ toast('記録がありません'); return false; }
   const btn=$('btnBackup');
   btn.disabled=true; toast('写真を集めています…');
-  const ph={};
-  for(const l of logs){
-    if(l.photoCount){ const ps=await getPhotos(l.id); if(ps.length) ph[l.id]=ps; }
+  try{
+    const ph={};
+    for(const l of logs){
+      if(l.photoCount){ const ps=await getPhotos(l.id); if(ps.length) ph[l.id]=ps; }
+    }
+    dl('現場記録バックアップ_'+today()+'.json',JSON.stringify({v:2,logs:logs,photos:ph}),'application/json');
+  }catch(e){
+    btn.disabled=false;
+    toast('バックアップを作れませんでした',true);
+    return false;
   }
-  dl('現場記録バックアップ_'+today()+'.json',JSON.stringify({v:2,logs:logs,photos:ph}),'application/json');
   btn.disabled=false;
+  /* 実際にファイルを保存したかまでは分からないので、書き出せた時点で控える */
+  backupAt=Date.now();
+  snoozeUntil=0;
+  try{ await store.set(BKEY,String(backupAt)); await store.del(BSKEY); }catch(e){}
+  updBackupBar();
+  updBackupInfo();
   toast('バックアップを保存しました');
-};
+  return true;
+}
+$('btnBackup').onclick=()=>doBackup();
 $('btnRestore').onclick=()=>$('fRestore').click();
 $('fRestore').onchange=e=>{
   const f=e.target.files[0]; if(!f) return;
@@ -1360,6 +1395,67 @@ function dl(name,data,type){
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 
+/* ================= バックアップの催促 =================
+   記録はこの端末の中にしか無いので、機種変更や故障で丸ごと消える。
+   最後のバックアップから BACKUP_DAYS 日経ったら画面上部で知らせる。
+   一度も取っていない時は、使い始めた日を基準にする。
+====================================================== */
+let backupAt=0, snoozeUntil=0, firstUse=0;
+let backupReady=false;      /* 読み込みが済むまでは帯を出さない */
+
+async function loadBackupState(){
+  const num=async k=>{
+    try{ const r=await store.get(k); return r&&r.value?(Number(r.value)||0):0; }catch(e){ return 0; }
+  };
+  backupAt=await num(BKEY);
+  snoozeUntil=await num(BSKEY);
+  firstUse=await num(FUKEY);
+  if(!firstUse){
+    firstUse=Date.now();
+    try{ await store.set(FUKEY,String(firstUse)); }catch(e){}
+  }
+  backupReady=true;
+}
+function daysSince(ms){ return Math.floor((Date.now()-ms)/86400000); }
+function stampDate(ms){
+  const d=new Date(ms);
+  return d.getFullYear()+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0');
+}
+function updBackupBar(){
+  const b=$('backupBar');
+  if(!b) return;
+  if(!backupReady||!logs.length||Date.now()<snoozeUntil){ b.hidden=true; return; }
+  const base=backupAt||firstUse;
+  const d=daysSince(base);
+  if(d<BACKUP_DAYS){ b.hidden=true; return; }
+  const msg=backupAt
+    ? '最後にバックアップしてから'+d+'日経っています。'
+    : 'まだ一度もバックアップしていません（使い始めて'+d+'日）。';
+  b.hidden=false;
+  b.innerHTML='<span class="bb-msg">'+esc(msg)+'記録はこの端末の中だけにあります。</span>'
+    +'<button type="button" class="bb-go" data-bb="now">今すぐ保存</button>'
+    +'<button type="button" data-bb="later">後で</button>';
+}
+function updBackupInfo(){
+  const el=$('backupInfo');
+  if(!el) return;
+  el.textContent=backupAt
+    ? '最終バックアップ：'+stampDate(backupAt)+'（'+daysSince(backupAt)+'日前）'
+    : 'まだ一度もバックアップしていません。';
+}
+$('backupBar').onclick=async e=>{
+  const b=e.target.closest('button[data-bb]');
+  if(!b) return;
+  if(b.dataset.bb==='later'){
+    snoozeUntil=Date.now()+SNOOZE_DAYS*86400000;
+    try{ await store.set(BSKEY,String(snoozeUntil)); }catch(err){}
+    updBackupBar();
+    toast(SNOOZE_DAYS+'日後にまたお知らせします');
+    return;
+  }
+  await doBackup();
+};
+
 /* ================= 気づきメモ ================= */
 let noteTimer=null;
 async function loadNotes(){
@@ -1394,8 +1490,11 @@ drawPhotos();
 (async()=>{
   await store.init();
   showMode();
+  await loadBackupState();
   await load();
   await loadNotes();
+  updBackupBar();
+  updBackupInfo();
 })();
 </script>
 </body>
