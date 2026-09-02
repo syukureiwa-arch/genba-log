@@ -1,6 +1,6 @@
 # 現場記録アプリ 引き継ぎ資料
 
-このファイルと `genba-log.html` をClaude Codeに渡せば、続きから作業できる。
+このファイルと `index.html` をClaude Codeに渡せば、続きから作業できる。
 プロジェクト直下に `CLAUDE.md` としてリネームして置くのを推奨。
 
 ---
@@ -152,7 +152,7 @@ IndexedDBの判定は「開く→試し書き→読み直し」まで確認し�
 | `icon.svg` | アイコンの元データ。作り直す時はこれを編集して書き出す |
 | `sw.test.js` | `sw.js` の動作確認（`node sw.test.js`） |
 
-`genba-log.html` 側には manifest への link、`theme-color`、apple-touch-icon、
+`index.html` 側には manifest への link、`theme-color`、apple-touch-icon、
 それと `sw.js` の登録を足しただけ。**登録に失敗しても握り潰して普通に動く**ので、
 `file://` で直接開いた時も今まで通り使える。
 
@@ -189,7 +189,7 @@ IndexedDBの判定は「開く→試し書き→読み直し」まで確認し�
 Service Worker はHTTPSでないと動かない（`localhost` だけ例外）。
 静的ホスティングに置く必要がある。ビルドは要らず、フォルダの中身をそのまま置くだけ。
 
-`start_url` は `./genba-log.html` にしてあるので、どのパスに置いても動く。
+`start_url` も `scope` も相対にしてあるので、どのパスの下に置いても動く。
 
 写真は今もdataURL文字列で持っている。IndexedDBはBlobをそのまま置けるので、
 落ち着いたら差し替えると容量効率が良くなる（表示・書き出し側も直す必要がある）。
@@ -221,7 +221,7 @@ Service Worker はHTTPSでないと動かない（`localhost` だけ例外）。
 
 1. 現行アプリからバックアップJSONを吸い出す（可能であれば）
 2. ~~プロジェクトフォルダを作り、gitで管理を開始する~~ ← **済**
-3. ~~`genba-log.html` の保存層をIndexedDBに差し替える~~ ← **済**
+3. ~~`index.html` の保存層をIndexedDBに差し替える~~ ← **済**
 4. ~~バックアップの取り込みで既存データを復旧、動作確認~~ ← **済**
 5. ~~PWA化（manifest / Service Worker）~~ ← **済**
 6. 静的ホスティングにデプロイ、スマホでホーム画面に追加 ← **次はここ**

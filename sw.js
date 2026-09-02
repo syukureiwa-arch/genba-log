@@ -11,7 +11,7 @@ const VERSION='v1';
 const CACHE='genba-log-'+VERSION;
 const ASSETS=[
   './',
-  './genba-log.html',
+  './index.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
@@ -45,7 +45,7 @@ self.addEventListener('fetch',e=>{
   e.respondWith((async()=>{
     const cache=await caches.open(CACHE);
     /* 起動（アドレスを開く操作）は、どのURLでもアプリ本体を返す */
-    const key=req.mode==='navigate'?'./genba-log.html':req;
+    const key=req.mode==='navigate'?'./index.html':req;
 
     const hit=await cache.match(key);
     const net=fetch(req).then(res=>{

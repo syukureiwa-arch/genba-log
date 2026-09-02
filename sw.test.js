@@ -36,7 +36,7 @@ function makeEnv(){
       env.fetchLog.push(u);
       if(env.offline) throw new TypeError('Failed to fetch');
       const p=new URL(u).pathname;
-      const key=(p==='/')?'/genba-log.html':p;          /* 実サーバと同じく / は本体を返す */
+      const key=(p==='/')?'/index.html':p;          /* 実サーバと同じく / は本体を返す */
       if(env.served[key]!==undefined) return mkRes(env.served[key],200);
       return mkRes('404',404);
     }
@@ -63,7 +63,7 @@ const evt=()=>{ const w=[]; return {waits:w, waitUntil:p=>w.push(p)}; };
 const fire=async(env,type,extra)=>{ const e={...evt(),...extra}; await env.handlers[type](e); await Promise.all(e.waits); return e; };
 
 (async()=>{
-  const ASSETS=['/','/genba-log.html','/manifest.json','/icon-192.png','/icon-512.png'];
+  const ASSETS=['/','/index.html','/manifest.json','/icon-192.png','/icon-512.png'];
 
   console.log('\n[1] install で必要なファイルを全部キャッシュする');
   let env=makeEnv();
@@ -86,10 +86,10 @@ const fire=async(env,type,extra)=>{ const e={...evt(),...extra}; await env.handl
   ok(env.claimed===true,'clients.claim が呼ばれる');
 
   console.log('\n[3] オンライン：起動はキャッシュから即返し、裏で取り直す');
-  env.served['/genba-log.html']='V2:更新後';   /* アプリを新しくして再配置した想定 */
+  env.served['/index.html']='V2:更新後';   /* アプリを新しくして再配置した想定 */
   env.fetchLog=[];
   let res=await (async()=>{ let out; await fire(env,'fetch',{request:{method:'GET',url:ORIGIN+'/',mode:'navigate'},respondWith:p=>{out=p;}}); return out; })();
-  ok(await (await res).text()==='V1:/genba-log.html','まず古いキャッシュを即返す（起動が速い）');
+  ok(await (await res).text()==='V1:/index.html','まず古いキャッシュを即返す（起動が速い）');
   await new Promise(r=>setTimeout(r,20));
   ok(env.fetchLog.length===1,'裏で取り直している');
 

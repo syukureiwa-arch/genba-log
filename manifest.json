@@ -3,7 +3,7 @@
   "short_name": "現場記録",
   "description": "その日の現場作業をスマホで記録する",
   "lang": "ja",
-  "start_url": "./genba-log.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",

@@ -10,7 +10,7 @@ const TYPES={'.html':'text/html; charset=utf-8','.json':'application/json; chars
   '.css':'text/css; charset=utf-8','.png':'image/png','.svg':'image/svg+xml','.ico':'image/x-icon'};
 http.createServer((req,res)=>{
   let p=decodeURIComponent(req.url.split('?')[0]);
-  if(p==='/') p='/genba-log.html';
+  if(p==='/') p='/index.html';
   const fp=path.resolve(ROOT,'.'+p);
   if(fp!==ROOT&&!fp.startsWith(ROOT+path.sep)){ res.writeHead(403); return res.end('403'); }
   fs.readFile(fp,(e,b)=>{
