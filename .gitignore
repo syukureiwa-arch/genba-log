@@ -1,0 +1,6 @@
+node_modules/
+*.log
+Thumb.db
+Thumbs.db
+.DS_Store
+desktop.ini

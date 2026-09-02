@@ -1,0 +1,15 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "genba-log",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "dev-server.js",
+        ".",
+        "8777"
+      ],
+      "port": 8777
+    }
+  ]
+}

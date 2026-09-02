@@ -447,8 +447,6 @@ const OLDKEY='genba_logs_v1';
 const PKEY='genba_photo:';
 const DKEY='genba_draft';
 const DPKEY='genba_draft_photos';
-const NKEY='genba_notes';
-const MIGKEY='genba_migrated';   /* 旧保存先からの取り込み済みの印 */
 const MAX_PHOTOS=30;
 const CHUNK=3;              /* 写真は3枚ずつ分けて保存 */
 const MAX_BYTES=4200000;
@@ -462,70 +460,24 @@ let curMonth='';            /* '' = 全期間 */
 const $=id=>document.getElementById(id);
 
 /* ================= 保存先（環境に合わせて自動で切り替え） =================
-   idb   … IndexedDB（本命）。容量が大きく、アプリを更新しても残る
-   local … localStorage（IndexedDBが使えない時の保険）。5MB程度で頭打ち
+   app   … アプリ内の保存領域（本命）
+   local … ブラウザの保存領域（ファイルを直接開いた時など）
    mem   … どちらも使えない。閉じると消える
-
-   get / set / del の呼び出し形はこれまでと同じ。
-   get は {key,value} か null を返す。値は文字列のまま入れている
-   （写真をBlobで持つのは動作確認が済んでから。まず動くものを保つ）
 ========================================================================= */
-const DBNAME='genba-log';
-const DBVER=1;
-const DBSTORE='kv';
-const OPEN_TIMEOUT=5000;   /* プライベートモードで open が返らない環境の保険 */
-
-function idbOpen(){
-  return new Promise((res,rej)=>{
-    if(!window.indexedDB){ rej(new Error('IndexedDBがありません')); return; }
-    let req;
-    try{ req=indexedDB.open(DBNAME,DBVER); }catch(e){ rej(e); return; }
-    const timer=setTimeout(()=>rej(new Error('IndexedDBの応答がありません')),OPEN_TIMEOUT);
-    const done=fn=>(...a)=>{ clearTimeout(timer); fn(...a); };
-    req.onupgradeneeded=()=>{
-      const db=req.result;
-      if(!db.objectStoreNames.contains(DBSTORE)) db.createObjectStore(DBSTORE);
-    };
-    req.onsuccess=done(()=>res(req.result));
-    req.onerror=done(()=>rej(req.error||new Error('IndexedDBを開けません')));
-    req.onblocked=done(()=>rej(new Error('IndexedDBが使用中です')));
-  });
-}
-/* 1操作＝1トランザクション。完了まで待ってから解決する */
-function idbReq(db,mode,fn){
-  return new Promise((res,rej)=>{
-    let tx,r;
-    try{ tx=db.transaction(DBSTORE,mode); r=fn(tx.objectStore(DBSTORE)); }
-    catch(e){ rej(e); return; }
-    tx.onabort=()=>rej(tx.error||new Error('保存できませんでした'));
-    tx.onerror=()=>rej(tx.error||new Error('保存できませんでした'));
-    tx.oncomplete=()=>res(r?r.result:undefined);
-  });
-}
-const idbGet=(db,k)=>idbReq(db,'readonly',s=>s.get(k));
-const idbSet=(db,k,v)=>idbReq(db,'readwrite',s=>s.put(v,k));
-const idbDel=(db,k)=>idbReq(db,'readwrite',s=>s.delete(k));
-
 const store={
   mode:'mem',
   mem:{},
-  db:null,
-  initErr:'',
-  rescued:0,
   async init(){
-    try{
-      this.db=await idbOpen();
-      await idbSet(this.db,'genba_probe','1');
-      if(await idbGet(this.db,'genba_probe')==='1'){
-        try{ await idbDel(this.db,'genba_probe'); }catch(e){}
-        this.mode='idb';
-        try{ await this.rescue(); }catch(e){}
-        return;
-      }
-      this.initErr='IndexedDBの読み書きを確認できません';
-    }catch(e){
-      this.initErr=(e&&e.message)?String(e.message).slice(0,80):'IndexedDBを開けません';
-      this.db=null;
+    if(window.storage){
+      try{
+        await window.storage.set('genba_probe','1');
+        const r=await window.storage.get('genba_probe');
+        if(r&&r.value==='1'){
+          this.mode='app';
+          try{ await window.storage.delete('genba_probe'); }catch(e){}
+          return;
+        }
+      }catch(e){}
     }
     try{
       localStorage.setItem('genba_probe','1');
@@ -537,72 +489,8 @@ const store={
     }catch(e){}
     this.mode='mem';
   },
-
-  /* 旧バージョンの保存先に残っている記録をIndexedDBへ引き取る。
-     ・一度だけ動く（印を MIGKEY に残す）
-     ・IndexedDB側に既にあるキーは上書きしない
-     ・元は消さない。取り込みに失敗しても手元に残るように */
-  async rescue(){
-    if(await idbGet(this.db,MIGKEY)) return;
-    let n=0;
-    try{ n+=await this.rescueLocal(); }catch(e){}
-    try{ n+=await this.rescueApp(); }catch(e){}
-    try{ await idbSet(this.db,MIGKEY,String(Date.now())); }catch(e){}
-    this.rescued=n;
-  },
-  async rescueLocal(){
-    let n=0;
-    const keys=[];
-    try{
-      for(let i=0;i<localStorage.length;i++){
-        const k=localStorage.key(i);
-        if(k&&k.indexOf('genba')===0&&k!=='genba_probe'&&k!==MIGKEY) keys.push(k);
-      }
-    }catch(e){ return 0; }
-    for(const k of keys){
-      try{
-        const cur=await idbGet(this.db,k);
-        if(cur!==undefined&&cur!==null) continue;
-        const v=localStorage.getItem(k);
-        if(v!==null){ await idbSet(this.db,k,v); n++; }
-      }catch(e){}
-    }
-    return n;
-  },
-  /* window.storage はキー一覧が取れないので、判っているキーだけ順に当たる。
-     戻り値は「取り込み後にそのキーが在るか」。写真の連番を途中で切らないため */
-  async rescueApp(){
-    if(!window.storage) return 0;
-    let n=0;
-    const pull=async k=>{
-      try{
-        const cur=await idbGet(this.db,k);
-        if(cur!==undefined&&cur!==null) return String(cur);
-        const r=await window.storage.get(k);
-        if(r&&r.value!=null){ await idbSet(this.db,k,String(r.value)); n++; return String(r.value); }
-      }catch(e){}
-      return null;
-    };
-    for(const k of [KEY,OLDKEY,DKEY,DPKEY,NKEY]){
-      const v=await pull(k);
-      if(!v||(k!==KEY&&k!==OLDKEY)) continue;
-      let arr=null;
-      try{ arr=JSON.parse(v); }catch(e){}
-      if(!Array.isArray(arr)) continue;
-      for(const l of arr){
-        if(!l||!l.id) continue;
-        await pull(PKEY+l.id);                                   /* 旧・単一キー形式 */
-        for(let i=0;i<20;i++){ if(!await pull(PKEY+l.id+':'+i)) break; }
-      }
-    }
-    return n;
-  },
-
   async get(k){
-    if(this.mode==='idb'){
-      const v=await idbGet(this.db,k);
-      return (v===undefined||v===null)?null:{key:k,value:v};
-    }
+    if(this.mode==='app'){ return await window.storage.get(k); }
     if(this.mode==='local'){
       const v=localStorage.getItem(k);
       return v===null?null:{key:k,value:v};
@@ -611,29 +499,23 @@ const store={
     return v===undefined?null:{key:k,value:v};
   },
   async set(k,v){
-    if(this.mode==='idb'){ await idbSet(this.db,k,v); return true; }
+    if(this.mode==='app'){ await window.storage.set(k,v); return true; }
     if(this.mode==='local'){ localStorage.setItem(k,v); return true; }
     this.mem[k]=v; return true;
   },
   async del(k){
-    if(this.mode==='idb'){ await idbDel(this.db,k); return true; }
+    if(this.mode==='app'){ await window.storage.delete(k); return true; }
     if(this.mode==='local'){ localStorage.removeItem(k); return true; }
     delete this.mem[k]; return true;
   }
 };
 function showMode(){
   const b=$('modeBar');
-  if(store.mode==='idb'){
-    if(!store.rescued){ b.hidden=true; return; }
-    b.hidden=false;
-    b.className='modebar ok';
-    b.textContent='前の保存先に残っていた'+store.rescued+'項目を取り込みました。中身を確かめて、念のためバックアップを取っておいてください。';
-    return;
-  }
+  if(store.mode==='app'){ b.hidden=true; return; }
   b.hidden=false;
   if(store.mode==='local'){
     b.className='modebar ok';
-    b.textContent='IndexedDBが使えないため、簡易の保存領域に切り替えています（'+(store.initErr||'原因不明')+'）。容量が小さく写真がすぐ溢れます。こまめにバックアップを取ってください。';
+    b.textContent='このブラウザに保存しています。履歴を消すと記録も消えるので、こまめにバックアップを取ってください。';
   }else{
     b.className='modebar ng';
     b.textContent='この環境では保存ができません。画面を閉じると記録は消えます。書いた内容は「集計」からテキストで書き出してください。';
@@ -1285,67 +1167,34 @@ $('btnRestore').onclick=()=>$('fRestore').click();
 $('fRestore').onchange=e=>{
   const f=e.target.files[0]; if(!f) return;
   const r=new FileReader();
-  r.onerror=()=>toast('ファイルを開けませんでした',true);
   r.onload=async ev=>{
-    /* ---- 読み取り。ここで失敗したらファイル側の問題 ----
-       受け付ける形は {v:2, logs:[...], photos:{id:[dataURL,...]}} と、
-       記録だけの配列（古い書き出し）の2通り */
-    let inLogs,inPh;
     try{
       const d=JSON.parse(ev.target.result);
-      inLogs=Array.isArray(d)?d:(d&&d.logs);
-      inPh=(!Array.isArray(d)&&d&&d.photos)?d.photos:{};
-      if(!Array.isArray(inLogs)) throw new Error('記録の一覧が見つかりません');
-    }catch(err){
-      toast('バックアップとして読めませんでした（'+((err&&err.message)||'形式が違います')+'）',true);
-      return;
-    }
+      const inLogs=Array.isArray(d)?d:d.logs;
+      const inPh=Array.isArray(d)?null:(d.photos||{});
+      if(!Array.isArray(inLogs)) throw 0;
+      if(!confirm(inLogs.length+'件の記録を読み込みます。今の記録に追加されます。')) return;
 
-    const ids=new Set(logs.map(l=>String(l.id)));
-    const fresh=inLogs.filter(x=>x&&typeof x==='object'&&!ids.has(String(x.id)));
-    const dup=inLogs.length-fresh.length;
-    if(!fresh.length){
-      toast(dup?'すべて取り込み済みでした（'+dup+'件）':'記録が入っていませんでした');
-      return;
-    }
-    if(!confirm(fresh.length+'件を今の記録に追加します。'
-      +(dup?'\n（'+dup+'件は取り込み済みなので飛ばします）':'')+'\nよろしいですか？')) return;
-
-    /* ---- 取り込み。途中で転んでも、入ったぶんは必ず保存する ---- */
-    const btn=$('btnRestore');
-    btn.disabled=true;
-    toast('取り込んでいます…');
-    let added=0,ng=0,stop='';
-    try{
-      for(const x of fresh){
+      const ids=new Set(logs.map(l=>String(l.id)));
+      let added=0,ng=0;
+      for(const x of inLogs){
+        if(ids.has(String(x.id))) continue;
         const id=x.id||newId();
-        if(ids.has(String(id))) continue;      /* 同じファイル内の重複も弾く */
-        let ps=Array.isArray(x.photos)?x.photos:(Array.isArray(inPh[x.id])?inPh[x.id]:[]);
+        let ps=Array.isArray(x.photos)?x.photos:((inPh&&inPh[x.id])?inPh[x.id]:[]);
         ps=ps.slice(0,MAX_PHOTOS);
-        if(ps.length){
-          let ok=false;
-          try{ ok=await savePhotos(id,ps,null); }catch(err){ ok=false; }
-          if(!ok){ ng++; ps=[]; }              /* 写真が入らなくても記録本体は残す */
-        }
+        if(ps.length){ const ok=await savePhotos(id,ps,null); if(!ok){ ng++; ps=[]; } }
         logs.push({
           id, date:x.date||today(), client:x.client||'', site:x.site||'', work:x.work||'', note:x.note||'',
           start:x.start||'', end:x.end||'',
           photoCount:ps.length, c:1, draft:!(x.site&&x.work)
         });
-        ids.add(String(id));
         added++;
       }
-    }catch(err){ stop=(err&&err.message)?String(err.message).slice(0,80):'原因不明'; }
-
-    const ok=await saveLogs();
-    buildMonths();
-    render();
-    btn.disabled=false;
-    if(!ok) return;                            /* 失敗の理由は saveLogs が赤字で出す */
-    if(stop){ toast(added+'件まで取り込んだところで止まりました（'+stop+'）',true); return; }
-    toast(added+'件を取り込みました'
-      +(ng?'（写真'+ng+'件は入りませんでした）':'')
-      +(dup?'／'+dup+'件は取り込み済み':''));
+      await saveLogs();
+      buildMonths();
+      render();
+      toast(added+'件を復元しました'+(ng?'（写真'+ng+'件は入りませんでした）':''));
+    }catch(err){ toast('ファイルを読めませんでした',true); }
   };
   r.readAsText(f);
   e.target.value='';
@@ -1358,6 +1207,7 @@ function dl(name,data,type){
 }
 
 /* ================= 気づきメモ ================= */
+const NKEY='genba_notes';
 let noteTimer=null;
 async function loadNotes(){
   try{
