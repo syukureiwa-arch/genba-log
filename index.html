@@ -155,6 +155,47 @@ button:focus-visible{outline:2px solid var(--trowel);outline-offset:2px}
 .mat-stat-row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px}
 .mat-stat-row>span:last-child{white-space:nowrap;color:var(--ink-soft)}
 .mat-stat-total{display:flex;justify-content:space-between;padding:10px 0 0;font-weight:700;font-size:14px}
+
+/* ---- 見るタブの表示切り替え・階層 ---- */
+.viewswitch{
+  display:flex;margin-bottom:12px;border:1px solid var(--line);
+  border-radius:8px;overflow:hidden;background:var(--white);
+}
+.viewswitch button{
+  flex:1;padding:12px 8px;font-size:14px;font-weight:700;
+  background:var(--white);color:var(--ink-soft);
+}
+.viewswitch button.on{background:var(--trowel);color:var(--white)}
+.crumb{display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;color:var(--ink-soft);flex-wrap:wrap}
+.crumb .btn-back{
+  background:var(--paper-deep);border:1px solid var(--line);color:var(--ink-soft);
+  padding:8px 13px;border-radius:7px;font-size:13px;font-weight:700;
+}
+.crumb .btn-back:active{background:var(--mortar-light)}
+.crumb .here{font-weight:700;color:var(--ink);font-size:15px}
+.drill-item{
+  width:100%;text-align:left;background:var(--white);border:1px solid var(--line);
+  border-radius:8px;padding:14px;margin-bottom:8px;
+  display:flex;align-items:center;gap:10px;
+}
+.drill-item:active{background:var(--paper-deep)}
+.drill-item>span:first-child{flex:1;min-width:0}
+.drill-main{display:block;font-size:16px;font-weight:700;color:var(--ink);word-break:break-word}
+.drill-sub{display:block;font-size:12px;color:var(--ink-soft);margin-top:3px}
+.drill-right{font-size:12px;color:var(--ink-soft);white-space:nowrap}
+.drill-arrow{color:var(--mortar);font-size:20px;line-height:1}
+
+/* ---- 現場カルテ ---- */
+.chart-head{margin-bottom:12px}
+.chart-title{font-size:20px;font-weight:700;color:var(--ink);word-break:break-word}
+.chart-sub{font-size:13px;color:var(--ink-soft);margin-top:3px}
+.board{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px}
+.board-box{background:var(--white);border:1px solid var(--line);border-radius:8px;padding:12px}
+.board-num{font-size:20px;font-weight:700;color:var(--ink)}
+.board-lbl{font-size:11px;color:var(--ink-soft);margin-top:3px}
+.mrow{display:flex;justify-content:space-between;font-size:14px;padding:7px 0;border-bottom:1px solid var(--line)}
+.mrow:last-child{border-bottom:none}
+.mat-date{margin-top:6px;font-size:14px}
 .lnk{background:none;color:var(--ink-soft);text-decoration:underline;font-size:12px;padding:2px}
 .log-note{
   margin-top:10px;padding:9px 11px;
@@ -440,13 +481,21 @@ button{font-family:inherit;cursor:pointer;border:none}
 <!-- ========== 見る ========== -->
 <div class="view" id="v-list">
 <div class="wrap">
+  <div class="viewswitch" id="viewSwitch">
+    <button type="button" data-vm="client">元請から見る</button>
+    <button type="button" data-vm="date">日付順で見る</button>
+  </div>
   <div class="filters">
     <label class="sr" for="qSearch">検索</label>
-    <input type="text" id="qSearch" placeholder="現場名・作業内容で検索">
+    <input type="text" id="qSearch" placeholder="現場・作業内容・材料で検索">
     <label class="sr" for="mList">月で絞る</label>
     <select id="mList" class="mSel"></select>
   </div>
+  <div class="crumb" id="crumb" hidden></div>
+  <div id="drill"></div>
   <div id="logList"></div>
+</div>
+</div>
 </div>
 </div>
 
@@ -828,13 +877,16 @@ async function migrate(){
     const ps=Array.isArray(l.photos)?l.photos.slice(0,MAX_PHOTOS):[];
     const id=l.id||newId();
     if(ps.length){ const ok=await savePhotos(id,ps,null); if(!ok) ng++; }
-    logs.push({
+    const rec={
       id, date:l.date||today(), client:l.client||'', site:l.site||'', work:l.work||'', note:l.note||'',
       start:l.start||'', end:l.end||'',
       photoCount:ps.length, c:1,
-      materials:normMats(l.materials), draft:isDraft(l.site,l.work,normMats(l.materials))
-    });
+      draft:isDraft(l.site,l.work,normMats(l.materials))
+    };
+    logs.push(rec);
+    if(Array.isArray(l.materials)&&l.materials.length) attachRows(rec,l.materials);
   }
+  await saveSiteMats();
   if(await saveLogs()){
     try{ await store.del(OLDKEY); }catch(e){}
     toast(ng?'引っ越しました（写真'+ng+'件は入りませんでした）':'前のデータを引き継ぎました');
@@ -1035,7 +1087,7 @@ function chips(){
   $('workChips').innerHTML=works.slice(0,8).map(w=>`<button class="chip" data-work="${esc(w)}">${esc(w)}</button>`).join('');
 
   const mnames=[],munits=[];
-  logs.forEach(l=>mats(l).forEach(m=>{
+  Object.keys(siteMats).forEach(k=>siteMats[k].forEach(m=>{
     if(m.name&&m.name.length<=14&&mnames.indexOf(m.name)<0) mnames.push(m.name);
     if(m.unit&&munits.indexOf(m.unit)<0) munits.push(m.unit);
   }));
@@ -1115,29 +1167,49 @@ function render(){
   chips();
   buildMonths();
   const q=($('qSearch').value||'').toLowerCase();
+  $('hdCount').textContent=logs.length?logs.length+'件':'';
+
+  /* 検索中は階層をたどらず日付順の一覧に切り替える。
+     どの段にいても横断で当てたいので */
+  const drill=(viewMode==='client'&&!q);
+  document.querySelectorAll('#viewSwitch button').forEach(b=>b.classList.toggle('on',b.dataset.vm===viewMode));
+  $('mList').hidden=drill;      /* 元請から見る時は全期間。月は現場カルテの中で見せる */
+  $('drill').hidden=!drill;
+  $('logList').hidden=drill;
+
+  if(drill){
+    drawCrumb();
+    if(selClient===null) drawClients();
+    else if(selSite===null) drawSites();
+    else drawChart();
+  }else{
+    $('crumb').hidden=true;
+    drawDateList(q);
+  }
+  stats();
+  matStats();
+  updBackupBar();
+}
+function drawDateList(q){
   const base=scoped().filter(l=>!q||
     (l.client||'').toLowerCase().indexOf(q)>=0||
     (l.site||'').toLowerCase().indexOf(q)>=0||
     (l.work||'').toLowerCase().indexOf(q)>=0||
     (l.note||'').toLowerCase().indexOf(q)>=0||
-    mats(l).some(m=>(m.name||'').toLowerCase().indexOf(q)>=0));
+    rowsOf(l.client,l.site).some(m=>(m.name||'').toLowerCase().indexOf(q)>=0));
 
   const drafts=base.filter(l=>l.draft).sort(byDateDesc);
   const done=base.filter(l=>!l.draft).sort(byDateDesc);
 
-  $('hdCount').textContent=logs.length?logs.length+'件':'';
-
   const el=$('logList');
   if(!base.length){
     el.innerHTML='<div class="empty">'+(logs.length?'この条件の記録はありません':'まだ記録がありません。<br>「記録する」から始めてください。')+'</div>';
-  }else{
-    el.innerHTML=
-      (drafts.length?`<div class="sec-head">書きかけ ${drafts.length}件</div>`+drafts.map(card).join(''):'')+
-      (done.length?(drafts.length?`<div class="sec-head">記録済み ${done.length}件</div>`:'')+done.map(card).join(''):'');
-    observePhotos();
+    return;
   }
-  stats();
-  updBackupBar();
+  el.innerHTML=
+    (drafts.length?'<div class="sec-head">書きかけ '+drafts.length+'件</div>'+drafts.map(card).join(''):'')+
+    (done.length?(drafts.length?'<div class="sec-head">記録済み '+done.length+'件</div>':'')+done.map(card).join(''):'');
+  observePhotos();
 }
 function card(l){
   const t=(l.start||l.end)?`${esc(l.start)}〜${esc(l.end)}`:'';
@@ -1151,7 +1223,6 @@ function card(l){
       ${t?`<div class="log-time">${t}</div>`:''}
       <div class="log-text${l.work?'':' none'}">${l.work?esc(l.work):'作業内容は未記入'}</div>
       ${l.note?`<div class="log-note">${esc(l.note)}</div>`:''}
-      ${matBlock(l)}
       ${n?`<div class="log-photos" data-photos="${esc(l.id)}">${'<div class="ph-skel"></div>'.repeat(Math.min(n,6))}</div>`:''}
     </div>
     <div class="log-actions">
@@ -1247,13 +1318,18 @@ $('btnSave').onclick=async()=>{
     id, date:date||today(), client, site, work, note, start:st, end:en,
     photoCount:okPhoto?shot.length:(prev?prev.photoCount||0:0),
     c:1,
-    materials,
     draft:isDraft(site,work,materials)
   };
   if(editId) logs=logs.map(l=>String(l.id)===String(editId)?rec:l);
   else logs.unshift(rec);
 
   const ok=await saveLogs();
+  if(ok){
+    /* 材料はこの記録の現場の持ち物として持たせ直す。同じ記録から入れた
+       古い行は入れ替わるので、編集し直しても二重に増えない */
+    attachRows(rec,materials);
+    await saveSiteMats();
+  }
   btn.disabled=false;
   if(!ok) return;
 
@@ -1261,6 +1337,7 @@ $('btnSave').onclick=async()=>{
   clearForm();
   await clearDraft();
   $('draftBar').hidden=true;
+  buildMonths();
   render();
   if(okPhoto) toast(rec.draft?'下書きとして保存しました':'保存しました');
 };
@@ -1307,7 +1384,9 @@ async function editLog(id){
   $('fWork').value=l.work||'';
   $('fNote').value=l.note||'';
   setMemo(!!(l.note||'').trim());
-  matRows=normMats(l.materials); if(!matRows.length) matRows=[blankMat()];
+  matRows=rowsOf(l.client,l.site).filter(m=>String(m.from||'')===String(l.id))
+                                 .map(m=>Object.assign({},m));
+  if(!matRows.length) matRows=[blankMat()];
   matFocus=0; drawMatRows(); setMat(matCount()>0); updMatBtn();
   updMemoBtn();
   $('fStart').value=l.start||'';
@@ -1324,6 +1403,8 @@ async function delLog(id){
   const l=logs.filter(x=>String(x.id)===String(id))[0];
   logs=logs.filter(x=>String(x.id)!==String(id));
   await dropPhotos(id,l?l.photoCount:0);
+  dropFrom(siteMats,id);            /* その記録から入れた材料も一緒に外す */
+  await saveSiteMats();
   await saveLogs();
   if(String(editId)===String(id)){ clearForm(); await clearDraft(); $('draftBar').hidden=true; }
   buildMonths();
@@ -1379,17 +1460,34 @@ $('btnExport').onclick=()=>{
   const set=scoped();
   if(!set.length){ toast('この期間の記録がありません'); return; }
   const head=curMonth?monthLabel(curMonth)+'\n\n':'';
-  const txt=head+set.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(l=>{
+  const body=set.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(l=>{
     const t=(l.start||l.end)?' '+(l.start||'')+'〜'+(l.end||''):'';
-    const ms=mats(l);
-    const sub=matSubtotal(ms);
-    const matTxt=ms.length?('\n【材料】\n'+ms.map(m=>{
-      const amount=String(m.qty||'').trim()+String(m.unit||'').trim();
-      const price=String(m.price||'').trim()!==''?' '+yen(m.price):'';
-      return '  '+(m.name||'（品名なし）')+(amount?' '+amount:'')+price;
-    }).join('\n')+(sub!==null?'\n  小計 '+yen(sub):'')):'';
-    return l.date+t+' '+(l.client?l.client+' / ':'')+(l.site||'現場未記入')+'\n'+(l.work||'（作業内容未記入）')+(l.note?'\n【備考】'+l.note:'')+matTxt+(l.photoCount?'\n［写真'+l.photoCount+'枚］':'');
+    return l.date+t+' '+(l.client?l.client+' / ':'')+(l.site||'現場未記入')+'\n'
+      +(l.work||'（作業内容未記入）')
+      +(l.note?'\n【備考】'+l.note:'')
+      +(l.photoCount?'\n［写真'+l.photoCount+'枚］':'');
   }).join('\n\n────────\n\n');
+
+  /* 材料は現場の持ち物なので、日々の記録とは分けて現場ごとにまとめて出す */
+  const seen={};
+  set.forEach(l=>{ seen[siteKey(l.client,l.site)]=1; });
+  let mat='';
+  Object.keys(seen).sort().forEach(k=>{
+    const ms=rowsInScope(k);
+    if(!ms.length) return;
+    const p=keyParts(k);
+    const sub=matSubtotal(ms);
+    mat+='\n'+siteLabel(p[1])+'（'+(String(p[0]||'').trim()||'元請未記入')+'）\n'
+      +ms.map(m=>{
+        const amount=String(m.qty||'').trim()+String(m.unit||'').trim();
+        const price=String(m.price||'').trim()!==''?' '+yen(m.price):'';
+        const d=String(m.date||'').trim()?'  '+m.date:'';
+        return '  '+(m.name||'（品名なし）')+(amount?' '+amount:'')+price+d;
+      }).join('\n')
+      +(sub!==null?'\n  小計 '+yen(sub):'')+'\n';
+  });
+
+  const txt=head+body+(mat?'\n\n════════\n【現場ごとの材料】\n'+mat:'');
   dl('現場記録_'+(curMonth||today())+'.txt',txt,'text/plain');
   toast((curMonth?monthLabel(curMonth):'全期間')+'を書き出しました');
 };
@@ -1402,7 +1500,8 @@ async function doBackup(){
     for(const l of logs){
       if(l.photoCount){ const ps=await getPhotos(l.id); if(ps.length) ph[l.id]=ps; }
     }
-    dl('現場記録バックアップ_'+today()+'.json',JSON.stringify({v:2,logs:logs,photos:ph}),'application/json');
+    dl('現場記録バックアップ_'+today()+'.json',
+       JSON.stringify({v:3,logs:logs,photos:ph,siteMaterials:siteMats}),'application/json');
   }catch(e){
     btn.disabled=false;
     toast('バックアップを作れませんでした',true);
@@ -1428,11 +1527,12 @@ $('fRestore').onchange=e=>{
     /* ---- 読み取り。ここで失敗したらファイル側の問題 ----
        受け付ける形は {v:2, logs:[...], photos:{id:[dataURL,...]}} と、
        記録だけの配列（古い書き出し）の2通り */
-    let inLogs,inPh;
+    let inLogs,inPh,inSM;
     try{
       const d=JSON.parse(ev.target.result);
       inLogs=Array.isArray(d)?d:(d&&d.logs);
       inPh=(!Array.isArray(d)&&d&&d.photos)?d.photos:{};
+      inSM=(!Array.isArray(d)&&d&&d.siteMaterials)?d.siteMaterials:null;
       if(!Array.isArray(inLogs)) throw new Error('記録の一覧が見つかりません');
     }catch(err){
       toast('バックアップとして読めませんでした（'+((err&&err.message)||'形式が違います')+'）',true);
@@ -1465,17 +1565,22 @@ $('fRestore').onchange=e=>{
           try{ ok=await savePhotos(id,ps,null); }catch(err){ ok=false; }
           if(!ok){ ng++; ps=[]; }              /* 写真が入らなくても記録本体は残す */
         }
-        logs.push({
+        const rec={
           id, date:x.date||today(), client:x.client||'', site:x.site||'', work:x.work||'', note:x.note||'',
           start:x.start||'', end:x.end||'',
           photoCount:ps.length, c:1,
-          materials:normMats(x.materials), draft:isDraft(x.site,x.work,normMats(x.materials))
-        });
+          draft:isDraft(x.site,x.work,normMats(x.materials))
+        };
+        logs.push(rec);
+        /* 古い形式（記録に materials が付いている）も現場側へ振り分ける */
+        if(Array.isArray(x.materials)&&x.materials.length) attachRows(rec,x.materials);
         ids.add(String(id));
         added++;
       }
     }catch(err){ stop=(err&&err.message)?String(err.message).slice(0,80):'原因不明'; }
 
+    if(inSM) mergeSiteMats(inSM);
+    await saveSiteMats();
     const ok=await saveLogs();
     buildMonths();
     render();
@@ -1496,21 +1601,41 @@ function dl(name,data,type){
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 
-/* ================= 材料 =================
-   記録1件につき materials:[{name,qty,unit,price}] を持つ。
-   price は空文字可。qty も含めて入力されたままの文字列で持ち、
-   集計する時だけ数として読む（「少々」のような書き方を殺さないため）。
-   古い記録には materials が無いので、読む時は必ず mats() を通すこと。
-========================================== */
-function mats(l){ return (l&&Array.isArray(l.materials))?l.materials:[]; }
-function blankMat(){ return {name:'',qty:'',unit:'',price:''}; }
+/* ================= 材料と現場 =================
+   材料は「現場の持ち物」。記録（日報）ではなく現場に紐づく。
+   現場を識別するキーは 元請名 + SEP + 現場名。どちらも空文字があり得る。
+
+     siteMats = { "<元請>\u001f<現場>": [ {name,qty,unit,price,date,from}, ... ] }
+
+   from は、その行を入れた記録のID。記録タブから入れた材料は from が付く。
+   記録を編集し直した時に二重に増えないよう、保存のたびに from が同じ行を
+   入れ替える。現場カルテで直接足した行の from は空。
+
+   数量と金額は入力されたままの文字列で持ち、集計する時だけ数として読む
+   （「少々」のような書き方を殺さないため）。
+=============================================== */
+const SMKEY='genba_site_materials';
+const MIGMAT='genba_mat_moved';        /* 現場への移行が済んだ印 */
+const PREMIG='genba_premigrate_logs';  /* 移行直前の記録の控え（元に戻す用） */
+const SEP='\u001f';   /* 元請名と現場名の区切り。名前に混ざらない制御文字を使う */
+
+let siteMats={};
+
+function siteKey(client,site){ return String(client==null?'':client).trim()+SEP+String(site==null?'':site).trim(); }
+function keyParts(k){ const i=String(k).indexOf(SEP); return i<0?[k,'']:[String(k).slice(0,i),String(k).slice(i+1)]; }
+function clientLabel(c){ return String(c==null?'':c).trim()||'（元請未記入）'; }
+function siteLabel(s){ return String(s==null?'':s).trim()||'（現場未記入）'; }
+function rowsOf(client,site){ const a=siteMats[siteKey(client,site)]; return Array.isArray(a)?a:[]; }
+
+function blankMat(){ return {name:'',qty:'',unit:'',price:'',date:'',from:''}; }
 function matEmpty(m){
   return !String(m.name||'').trim() && !String(m.qty||'').trim()
       && !String(m.unit||'').trim() && !String(m.price||'').trim();
 }
 /* 何が入ってくるか判らない（古いバックアップ等）ので、ここで形を揃える */
-function normMats(v){
+function normMats(v,def){
   if(!Array.isArray(v)) return [];
+  const d=def||{};
   const out=[];
   for(const m of v){
     if(!m||typeof m!=='object') continue;
@@ -1518,7 +1643,9 @@ function normMats(v){
       name:String(m.name==null?'':m.name).trim(),
       qty:String(m.qty==null?'':m.qty).trim(),
       unit:String(m.unit==null?'':m.unit).trim(),
-      price:String(m.price==null?'':m.price).trim()
+      price:String(m.price==null?'':m.price).trim(),
+      date:String(m.date==null?(d.date||''):m.date).trim(),
+      from:String(m.from==null?(d.from||''):m.from)
     };
     if(!matEmpty(r)) out.push(r);
   }
@@ -1535,13 +1662,100 @@ function numOf(v){
 }
 function fmtQty(n){ return String(Math.round(n*100)/100); }
 function yen(v){ return '¥'+numOf(v).toLocaleString('ja-JP'); }
-/* 金額が1つでも入っていれば小計を返す。全部空なら null */
+/* 金額が1つでも入っていれば合計を返す。全部空なら null */
 function matSubtotal(ms){
   let sum=0,has=false;
   ms.forEach(m=>{ if(String(m.price||'').trim()!==''){ sum+=numOf(m.price); has=true; } });
   return has?sum:null;
 }
 
+/* ---- 読み書き ---- */
+async function loadSiteMats(){
+  let v=null;
+  try{ const r=await store.get(SMKEY); v=r&&r.value?JSON.parse(r.value):null; }catch(e){ v=null; }
+  siteMats=(v&&typeof v==='object'&&!Array.isArray(v))?v:{};
+  Object.keys(siteMats).forEach(k=>{ siteMats[k]=normMats(siteMats[k]); if(!siteMats[k].length) delete siteMats[k]; });
+}
+async function saveSiteMats(){
+  const ok=await setKey(SMKEY,JSON.stringify(siteMats));
+  if(!ok) toast('材料を保存できませんでした（'+lastErr+'）',true);
+  return ok;
+}
+/* 空の行を落とす。入力中に走らせると行が消えて混乱するので、
+   画面を離れる時と、追加・削除の時だけ呼ぶ */
+function pruneSiteMats(){
+  Object.keys(siteMats).forEach(k=>{
+    siteMats[k]=siteMats[k].filter(m=>!matEmpty(m));
+    if(!siteMats[k].length) delete siteMats[k];
+  });
+}
+/* その記録から入れた行を、全ての現場から外す */
+function dropFrom(obj,id){
+  Object.keys(obj).forEach(k=>{
+    obj[k]=obj[k].filter(m=>String(m.from||'')!==String(id));
+    if(!obj[k].length) delete obj[k];
+  });
+}
+/* 記録タブで入れた材料を、その記録の現場に付け替える */
+function attachRows(rec,rows){
+  dropFrom(siteMats,rec.id);
+  /* from と入れた日は必ず上書きする。入力欄の行は from:'' を持っていて、
+     normMats の既定値（未設定の時だけ入る）では埋まらないため */
+  const clean=normMats(rows).map(m=>Object.assign({},m,{
+    date:m.date||rec.date||'',
+    from:String(rec.id)
+  }));
+  if(!clean.length) return;
+  const k=siteKey(rec.client,rec.site);
+  siteMats[k]=(siteMats[k]||[]).concat(clean);
+}
+
+/* ---- 記録から現場への移行（初回だけ） ----
+   1. 移行前の記録を控える。控えられなければ移行しない
+   2. 現場側へ足す（from が同じ行は入れ替えるので、途中で失敗して
+      やり直しても二重にならない）
+   3. 記録から materials を外す
+   4. 済んだ印を付ける。3で失敗したら印を付けないので次回やり直す
+   控え（genba_premigrate_logs）は消さずに残す。元に戻したい時に使う */
+async function migrateMaterials(){
+  try{ const r=await store.get(MIGMAT); if(r&&r.value) return false; }catch(e){ return false; }
+
+  const withMat=logs.filter(l=>Array.isArray(l.materials)&&l.materials.length);
+  if(!withMat.length){
+    try{ await store.set(MIGMAT,String(Date.now())); }catch(e){}
+    return false;
+  }
+  try{ await store.set(PREMIG,JSON.stringify(logs)); }
+  catch(e){ toast('移行前の控えを取れませんでした。材料の移行は見送ります',true); return false; }
+
+  const next=JSON.parse(JSON.stringify(siteMats));
+  let moved=0;
+  withMat.forEach(l=>{
+    const rows=normMats(l.materials,{date:l.date||'',from:String(l.id)});
+    if(!rows.length) return;
+    dropFrom(next,l.id);
+    const k=siteKey(l.client,l.site);
+    next[k]=(next[k]||[]).concat(rows);
+    moved+=rows.length;
+  });
+
+  const before=siteMats;
+  siteMats=next;
+  if(!await saveSiteMats()){ siteMats=before; return false; }
+
+  logs=logs.map(l=>{
+    if(!Array.isArray(l.materials)) return l;
+    const c=Object.assign({},l);
+    delete c.materials;
+    return c;
+  });
+  if(!await saveLogs()) return true;   /* 印は付けない。次の起動でやり直す */
+  try{ await store.set(MIGMAT,String(Date.now())); }catch(e){}
+  toast('材料'+moved+'件を現場ごとの持ち物に移しました');
+  return true;
+}
+
+/* ================= 記録タブの材料入力 ================= */
 let matRows=[blankMat()];
 let matFocus=0;          /* チップを押した時に入れる行 */
 
@@ -1551,9 +1765,9 @@ function drawMatRows(){
     '<div class="mat-row">'
      +'<input type="text" class="mat-name" data-f="name" data-i="'+i+'" placeholder="品名" value="'+esc(m.name)+'">'
      +'<div class="mat-nums">'
-       +'<input type="text" class="mat-qty" data-f="qty" data-i="'+i+'" inputmode="decimal" placeholder="数量" value="'+esc(m.qty)+'">'
-       +'<input type="text" class="mat-unit" data-f="unit" data-i="'+i+'" placeholder="単位" value="'+esc(m.unit)+'">'
-       +'<input type="text" class="mat-price" data-f="price" data-i="'+i+'" inputmode="numeric" placeholder="金額" value="'+esc(m.price)+'">'
+       +'<input type="text" data-f="qty" data-i="'+i+'" inputmode="decimal" placeholder="数量" value="'+esc(m.qty)+'">'
+       +'<input type="text" data-f="unit" data-i="'+i+'" placeholder="単位" value="'+esc(m.unit)+'">'
+       +'<input type="text" data-f="price" data-i="'+i+'" inputmode="numeric" placeholder="金額" value="'+esc(m.price)+'">'
      +'</div>'
      +'<button type="button" class="mat-del" data-del="'+i+'" aria-label="この行を消す">&times;</button>'
     +'</div>'
@@ -1622,40 +1836,244 @@ $('matUnitChips').onclick=e=>{
   setMatField('unit',c.dataset.matUnit);
 };
 
-/* ---- 集計：現場ごとの材料 ---- */
+/* ================= 「見る」タブの階層表示 ================= */
+let viewMode='client';   /* 'client' = 元請から見る / 'date' = 日付順で見る */
+let selClient=null;      /* 選んでいる元請（生の値。空文字もあり得るので未選択は null） */
+let selSite=null;
+let drillClients=[],drillSites=[];
+
+function goLevel(c,s){
+  pruneSiteMats();
+  selClient=c; selSite=s;
+  render();
+}
+$('viewSwitch').onclick=e=>{
+  const b=e.target.closest('button[data-vm]');
+  if(!b) return;
+  viewMode=b.dataset.vm;
+  if(viewMode==='client'){ selClient=null; selSite=null; }
+  render();
+};
+$('crumb').onclick=e=>{
+  if(!e.target.closest('[data-back]')) return;
+  if(selSite!==null) goLevel(selClient,null); else goLevel(null,null);
+};
+
+function drawCrumb(){
+  const c=$('crumb');
+  if(selClient===null){ c.hidden=true; c.innerHTML=''; return; }
+  c.hidden=false;
+  if(selSite===null){
+    c.innerHTML='<button type="button" class="btn-back" data-back="1">&larr; 元請一覧</button>'
+      +'<span class="here">'+esc(clientLabel(selClient))+'</span>';
+  }else{
+    c.innerHTML='<button type="button" class="btn-back" data-back="1">&larr; 現場一覧</button>'
+      +'<span>'+esc(clientLabel(selClient))+' /</span>'
+      +'<span class="here">'+esc(siteLabel(selSite))+'</span>';
+  }
+}
+
+/* 1段目：元請の一覧 */
+function drawClients(){
+  const by={};
+  logs.forEach(l=>{
+    const raw=String(l.client||'').trim();
+    if(!by[raw]) by[raw]={raw:raw,sites:new Set(),last:''};
+    if(String(l.site||'').trim()) by[raw].sites.add(String(l.site).trim());
+    const d=String(l.date||'');
+    if(d>by[raw].last) by[raw].last=d;
+  });
+  drillClients=Object.values(by).sort((a,b)=>b.last.localeCompare(a.last));
+  $('drill').innerHTML=drillClients.length?drillClients.map((v,i)=>
+    '<button type="button" class="drill-item" data-ci="'+i+'">'
+     +'<span><span class="drill-main">'+esc(clientLabel(v.raw))+'</span>'
+     +'<span class="drill-sub">現場 '+v.sites.size+'</span></span>'
+     +'<span class="drill-right">'+(v.last?'最終 '+fmtDate(v.last):'')+'</span>'
+     +'<span class="drill-arrow">&rsaquo;</span>'
+    +'</button>').join('')
+    :'<div class="empty">まだ記録がありません。<br>「記録する」から始めてください。</div>';
+}
+
+/* 2段目：現場の一覧 */
+function drawSites(){
+  const by={};
+  logs.forEach(l=>{
+    if(String(l.client||'').trim()!==selClient) return;
+    const raw=String(l.site||'').trim();
+    if(!by[raw]) by[raw]={raw:raw,days:new Set(),min:0,last:''};
+    if(l.date) by[raw].days.add(l.date);
+    by[raw].min+=mins(l);
+    const d=String(l.date||'');
+    if(d>by[raw].last) by[raw].last=d;
+  });
+  drillSites=Object.values(by).sort((a,b)=>b.last.localeCompare(a.last));
+  $('drill').innerHTML=drillSites.length?drillSites.map((v,i)=>
+    '<button type="button" class="drill-item" data-si="'+i+'">'
+     +'<span><span class="drill-main">'+esc(siteLabel(v.raw))+'</span>'
+     +'<span class="drill-sub">'+v.days.size+'日'+(v.min?' / '+hrs(v.min)+'h':'')+'</span></span>'
+     +'<span class="drill-right">'+(v.last?'最終 '+fmtDate(v.last):'')+'</span>'
+     +'<span class="drill-arrow">&rsaquo;</span>'
+    +'</button>').join('')
+    :'<div class="empty">この元請の現場はありません。</div>';
+}
+
+/* 3段目：現場カルテ */
+function siteMatRowsHtml(ms){
+  if(!ms.length) return '<p class="hint">まだ材料はありません。</p>';
+  return ms.map((m,i)=>
+    '<div class="mat-row">'
+     +'<input type="text" class="mat-name" data-sf="name" data-sr="'+i+'" placeholder="品名" value="'+esc(m.name)+'">'
+     +'<div class="mat-nums">'
+       +'<input type="text" data-sf="qty" data-sr="'+i+'" inputmode="decimal" placeholder="数量" value="'+esc(m.qty)+'">'
+       +'<input type="text" data-sf="unit" data-sr="'+i+'" placeholder="単位" value="'+esc(m.unit)+'">'
+       +'<input type="text" data-sf="price" data-sr="'+i+'" inputmode="numeric" placeholder="金額" value="'+esc(m.price)+'">'
+     +'</div>'
+     +'<input type="date" class="mat-date" data-sf="date" data-sr="'+i+'" value="'+esc(m.date)+'">'
+     +'<button type="button" class="mat-del" data-sdel="'+i+'" aria-label="この行を消す">&times;</button>'
+    +'</div>').join('');
+}
+function drawChart(){
+  const set=logs.filter(l=>String(l.client||'').trim()===selClient&&String(l.site||'').trim()===selSite).sort(byDateDesc);
+  const dates=[...new Set(set.map(l=>l.date).filter(Boolean))].sort();
+  const min=set.reduce((a,l)=>a+mins(l),0);
+  const shots=set.reduce((a,l)=>a+(l.photoCount||0),0);
+  const ms=rowsOf(selClient,selSite);
+  const money=matSubtotal(ms);
+
+  const byMonth={};
+  dates.forEach(d=>{ const m=monthOf(d); byMonth[m]=(byMonth[m]||0)+1; });
+  const months=Object.keys(byMonth).sort().reverse();
+
+  const box=(n,l)=>'<div class="board-box"><div class="board-num">'+n+'</div><div class="board-lbl">'+l+'</div></div>';
+
+  let h='';
+  h+='<div class="chart-head">'
+    +'<div class="chart-title">'+esc(siteLabel(selSite))+'</div>'
+    +'<div class="chart-sub">'+esc(clientLabel(selClient))+'</div>'
+    +'<div class="chart-sub">'+(dates.length?fmtDate(dates[0])+' 〜 '+fmtDate(dates[dates.length-1]):'記録なし')+'</div>'
+    +'</div>';
+  h+='<div class="board">'
+    +box(dates.length+'日','稼働日数')
+    +box(hrs(min)+'h','合計作業時間')
+    +(money!==null?box(yen(money),'材料の金額'):'')
+    +box(shots+'枚','写真')
+    +'</div>';
+  if(months.length>1){
+    h+='<div class="card"><div class="card-head"><span>月ごとの稼働日数</span></div><div class="card-body">'
+      +months.map(m=>'<div class="mrow"><span>'+monthLabel(m)+'</span><span>'+byMonth[m]+'日</span></div>').join('')
+      +'</div></div>';
+  }
+  h+='<div class="card"><div class="card-head"><span>材料</span>'
+    +'<span id="siteMatSaved" style="font-weight:400;font-size:11px;color:var(--ink-soft)"></span></div>'
+    +'<div class="card-body">'
+      +'<div id="siteMatRows">'+siteMatRowsHtml(ms)+'</div>'
+      +'<button type="button" class="btn-sub" id="btnSiteMatAdd" style="width:100%;margin-top:4px">＋ 材料を足す</button>'
+      +(money!==null?'<div class="mat-sum" style="border-top:1px solid var(--line);margin-top:10px"><span>合計</span><span>'+yen(money)+'</span></div>':'')
+      +'<p class="hint">入れた日は空のままでも構いません。</p>'
+    +'</div></div>';
+  h+='<div class="sec-head">日々の記録 '+set.length+'件</div>';
+  h+=set.length?set.map(card).join(''):'<div class="empty">この現場の記録はありません。</div>';
+  $('drill').innerHTML=h;
+  observePhotos();
+}
+
+/* 現場カルテの材料は打つたびに控える（少し待ってから書く） */
+let siteMatTimer=null;
+function queueSiteMats(){
+  clearTimeout(siteMatTimer);
+  const el=$('siteMatSaved'); if(el) el.textContent='…';
+  siteMatTimer=setTimeout(async()=>{
+    const ok=await saveSiteMats();
+    const e2=$('siteMatSaved'); if(e2) e2.textContent=ok?'保存済 '+hhmm(new Date()):'保存できず';
+  },800);
+}
+$('drill').addEventListener('input',e=>{
+  const el=e.target.closest('[data-sf]');
+  if(!el) return;
+  const k=siteKey(selClient,selSite);
+  const i=Number(el.dataset.sr);
+  if(!siteMats[k]||!siteMats[k][i]) return;
+  siteMats[k][i][el.dataset.sf]=el.value;
+  queueSiteMats();
+});
+$('drill').addEventListener('click',e=>{
+  const ci=e.target.closest('[data-ci]');
+  if(ci){ goLevel(drillClients[Number(ci.dataset.ci)].raw,null); return; }
+  const si=e.target.closest('[data-si]');
+  if(si){ goLevel(selClient,drillSites[Number(si.dataset.si)].raw); return; }
+
+  if(e.target.closest('#btnSiteMatAdd')){
+    const k=siteKey(selClient,selSite);
+    siteMats[k]=(siteMats[k]||[]).concat([blankMat()]);
+    drawChart();
+    const els=$('siteMatRows').querySelectorAll('input[data-sf="name"]');
+    if(els.length) els[els.length-1].focus();
+    return;
+  }
+  const del=e.target.closest('[data-sdel]');
+  if(del){
+    const k=siteKey(selClient,selSite);
+    if(siteMats[k]){
+      siteMats[k].splice(Number(del.dataset.sdel),1);
+      if(!siteMats[k].length) delete siteMats[k];
+    }
+    saveSiteMats();
+    drawChart();
+    return;
+  }
+  const img=e.target.closest('.log-photos img');
+  if(img){ viewImg(img.dataset.id,Number(img.dataset.idx)); return; }
+  const b=e.target.closest('button[data-act]');
+  if(!b) return;
+  if(b.dataset.act==='edit') editLog(b.dataset.id);
+  else delLog(b.dataset.id);
+});
+
+/* ================= 集計：現場ごとの材料 ================= */
+let matStatKeys=[];
+function rowsInScope(k){
+  return (siteMats[k]||[]).filter(m=>!matEmpty(m)&&(!curMonth||monthOf(m.date)===curMonth));
+}
 function matStats(){
   const sel=$('matSite');
-  const sites=[...new Set(scoped().filter(l=>l.site&&mats(l).length).map(l=>l.site))].sort();
-  const cur=sel.value;
-  sel.innerHTML=sites.length
-    ? sites.map(s=>'<option value="'+esc(s)+'">'+esc(s)+'</option>').join('')
+  matStatKeys=Object.keys(siteMats).filter(k=>rowsInScope(k).length).sort();
+  const cur=sel.value?matStatKeys.indexOf(sel.dataset.key||''):-1;
+  sel.innerHTML=matStatKeys.length
+    ? matStatKeys.map((k,i)=>{
+        const p=keyParts(k);
+        /* 元請が空の時に「（（元請未記入））」と二重括弧にならないようにする */
+        const c=String(p[0]||'').trim()?p[0]:'元請未記入';
+        return '<option value="'+i+'">'+esc(siteLabel(p[1]))+'（'+esc(c)+'）</option>';
+      }).join('')
     : '<option value="">（材料の記録がありません）</option>';
-  if(sites.indexOf(cur)>=0) sel.value=cur;
+  if(cur>=0) sel.value=String(cur);
   drawMatStats();
 }
 function drawMatStats(){
-  const site=$('matSite').value;
+  const sel=$('matSite');
   const box=$('matStats');
-  if(!site){ box.innerHTML='<div class="nodata">この期間に材料の記録はありません</div>'; return; }
+  const k=matStatKeys[Number(sel.value)];
+  if(k==null){
+    box.innerHTML='<div class="nodata">'+(curMonth?'この月に入れた材料はありません':'材料の記録はありません')+'</div>';
+    sel.dataset.key='';
+    return;
+  }
+  sel.dataset.key=k;
   /* 同じ品名でも単位が違えば足せないので、品名＋単位でまとめる */
   const agg={};
   let total=0,hasPrice=false;
-  scoped().forEach(l=>{
-    if(l.site!==site) return;
-    mats(l).forEach(m=>{
-      const name=m.name||'（品名なし）';
-      const k=name+' '+(m.unit||'');
-      if(!agg[k]) agg[k]={name:name,unit:m.unit||'',qty:0,price:0,hasPrice:false};
-      agg[k].qty+=numOf(m.qty);
-      if(String(m.price||'').trim()!==''){
-        const p=numOf(m.price);
-        agg[k].price+=p; agg[k].hasPrice=true;
-        total+=p; hasPrice=true;
-      }
-    });
+  rowsInScope(k).forEach(m=>{
+    const name=m.name||'（品名なし）';
+    const kk=name+SEP+(m.unit||'');
+    if(!agg[kk]) agg[kk]={name:name,unit:m.unit||'',qty:0,price:0,hasPrice:false};
+    agg[kk].qty+=numOf(m.qty);
+    if(String(m.price||'').trim()!==''){
+      const p=numOf(m.price);
+      agg[kk].price+=p; agg[kk].hasPrice=true;
+      total+=p; hasPrice=true;
+    }
   });
   const rows=Object.values(agg).sort((a,b)=>b.qty-a.qty);
-  if(!rows.length){ box.innerHTML='<div class="nodata">この現場の材料はありません</div>'; return; }
   box.innerHTML=rows.map(r=>
       '<div class="mat-stat-row"><span>'+esc(r.name)+'</span><span>'
       +fmtQty(r.qty)+esc(r.unit)+(r.hasPrice?' / '+yen(r.price):'')+'</span></div>'
@@ -1664,21 +2082,24 @@ function drawMatStats(){
 }
 $('matSite').onchange=drawMatStats;
 
-/* 一覧カードの中の材料。畳んだ状態で出す */
-function matBlock(l){
-  const ms=mats(l);
-  if(!ms.length) return '';
-  const sub=matSubtotal(ms);
-  const items=ms.map(m=>{
-    const amount=String(m.qty||'').trim()+String(m.unit||'').trim();
-    const right=[amount].filter(s=>s!=='')
-      .concat(String(m.price||'').trim()!==''?[yen(m.price)]:[]).join(' / ');
-    return '<div class="mat-item"><span>'+esc(m.name||'（品名なし）')+'</span><span>'+esc(right)+'</span></div>';
-  }).join('');
-  return '<details class="log-mat"><summary>材料 '+ms.length+'件</summary><div class="mat-list">'
-    +items
-    +(sub!==null?'<div class="mat-sum"><span>小計</span><span>'+yen(sub)+'</span></div>':'')
-    +'</div></details>';
+/* バックアップから読み込んだ現場材料を今のものに混ぜる。
+   まったく同じ行は足さない（同じファイルを二度読んでも増えないように） */
+function mergeSiteMats(obj){
+  if(!obj||typeof obj!=='object'||Array.isArray(obj)) return 0;
+  const sig=m=>[m.name,m.qty,m.unit,m.price,m.date,m.from].join(SEP);
+  let added=0;
+  Object.keys(obj).forEach(k=>{
+    const rows=normMats(obj[k]);
+    if(!rows.length) return;
+    const cur=siteMats[k]||[];
+    const seen={};
+    cur.forEach(m=>{ seen[sig(m)]=1; });
+    const add=rows.filter(m=>!seen[sig(m)]);
+    if(!add.length) return;
+    siteMats[k]=cur.concat(add);
+    added+=add.length;
+  });
+  return added;
 }
 
 /* ================= バックアップの催促 =================
@@ -1778,7 +2199,9 @@ drawMatRows(); updMatBtn();
   await store.init();
   showMode();
   await loadBackupState();
+  await loadSiteMats();
   await load();
+  if(await migrateMaterials()){ buildMonths(); render(); }
   await loadNotes();
   updBackupBar();
   updBackupInfo();
