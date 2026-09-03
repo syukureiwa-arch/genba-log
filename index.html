@@ -197,6 +197,63 @@ button:focus-visible{outline:2px solid var(--trowel);outline-offset:2px}
 .mrow:last-child{border-bottom:none}
 .mat-date{margin-top:6px;font-size:14px}
 .mat-gone{margin-top:6px;font-size:11px;color:var(--draft);font-weight:700}
+
+/* ---- テンプレート ---- */
+.tpl-bar{margin-bottom:12px}
+.tpl-bar .chips{margin-top:0;margin-bottom:8px}
+.tpl-chip{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 作業内容のチップは「本体＝1行追加」と「置換」の2つに割る */
+.chip-pair{
+  display:inline-flex;align-items:stretch;max-width:100%;
+  border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--paper-deep);
+}
+.chip-pair>button{background:none;border:none;font-family:inherit;color:var(--ink-soft);cursor:pointer}
+.chip-body{
+  padding:6px 11px;font-size:13px;text-align:left;
+  max-width:15em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.chip-body:active{background:var(--mortar-light)}
+.chip-rep{
+  padding:6px 9px;font-size:11px;font-weight:700;
+  border-left:1px solid var(--line);color:var(--trowel);flex:0 0 auto;
+}
+.chip-rep:active{background:var(--mortar-light)}
+
+/* ---- 管理（集計タブ） ---- */
+.mng-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.mng-row:last-child{border-bottom:none}
+.mng-main{flex:1;min-width:0;font-size:14px;color:var(--ink);overflow:hidden}
+.mng-sub{display:block;font-size:11px;color:var(--ink-soft);margin-top:2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---- 現場の状態 ---- */
+.st-badge{
+  display:inline-block;padding:2px 8px;border-radius:11px;
+  font-size:11px;font-weight:700;vertical-align:middle;
+}
+.st-active{background:var(--paper-deep);color:var(--ink-soft)}
+.st-done{background:var(--mortar-light);color:var(--mortar-dark)}
+.st-repair{background:#FBF3E2;color:#6A4E19;border:1px solid var(--draft)}
+.status-bar{
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  background:var(--white);border:1px solid var(--line);border-radius:8px;
+  padding:11px 12px;margin-bottom:12px;
+}
+.status-bar .status-date{font-size:12px;color:var(--ink-soft);flex:1;min-width:0}
+.done-wrap{margin-top:6px}
+.done-wrap>summary{
+  padding:11px 13px;font-size:13px;font-weight:700;color:var(--ink-soft);
+  cursor:pointer;list-style:none;background:var(--paper-deep);
+  border:1px solid var(--line);border-radius:8px;margin-bottom:8px;
+}
+.done-wrap>summary::-webkit-details-marker{display:none}
+.done-wrap>summary::after{content:"▾";float:right;color:var(--mortar)}
+.done-wrap[open]>summary::after{content:"▴"}
+.repair-mark{
+  display:inline-block;margin-left:7px;padding:1px 7px;border-radius:9px;
+  background:#FBF3E2;border:1px solid var(--draft);color:#6A4E19;
+  font-size:11px;font-weight:700;
+}
 .lnk{background:none;color:var(--ink-soft);text-decoration:underline;font-size:12px;padding:2px}
 .log-note{
   margin-top:10px;padding:9px 11px;
@@ -379,6 +436,10 @@ button{font-family:inherit;cursor:pointer;border:none}
     <button class="btn-sub" id="btnCopyLast">前回をコピー</button>
     <button class="btn-sub" id="btnClear">入力をクリア</button>
   </div>
+  <div class="tpl-bar" id="tplBar">
+    <div class="chips" id="tplChips"></div>
+    <button class="btn-sub" id="btnTplSave" style="width:100%">＋ この内容をテンプレートに登録</button>
+  </div>
 
   <div class="card">
     <div class="card-head"><span>日付と時間</span></div>
@@ -534,6 +595,15 @@ button{font-family:inherit;cursor:pointer;border:none}
     </div>
   </div>
 
+  <div class="card">
+    <div class="card-head"><span>作業テンプレートと候補</span></div>
+    <div class="card-body">
+      <p class="hint" style="margin-top:0">テンプレート</p>
+      <div id="tplManage"></div>
+      <p class="hint" style="margin-top:12px">よく使う作業内容（記録タブのチップに出ます）</p>
+      <div id="workCandManage"></div>
+    </div>
+  </div>
   <div class="card">
     <div class="card-head"><span>データの管理</span></div>
     <div class="card-body">
@@ -1083,9 +1153,16 @@ function chips(){
 
   drawSiteChips();
 
-  const works=[];
-  logs.forEach(l=>{ if(l.work&&l.work.length<=14&&works.indexOf(l.work)<0) works.push(l.work); });
-  $('workChips').innerHTML=works.slice(0,8).map(w=>`<button class="chip" data-work="${esc(w)}">${esc(w)}</button>`).join('');
+  /* 作業内容は行ごとに数えて多い順に出す。文字数では絞らない */
+  $('workChips').innerHTML=workCandidates().slice(0,10).map(c=>
+    '<span class="chip-pair">'
+     +'<button type="button" class="chip-body" data-wadd="'+esc(c.text)+'" title="'+esc(c.text)+'">'+esc(c.text)+'</button>'
+     +'<button type="button" class="chip-rep" data-wrep="'+esc(c.text)+'">置換</button>'
+    +'</span>').join('');
+
+  $('tplChips').innerHTML=templates.map(t=>
+    '<button type="button" class="chip tpl-chip" data-tpl="'+esc(t.id)+'">'+esc(t.name)+'</button>').join('');
+  $('tplChips').hidden=!templates.length;
 
   const mnames=[],munits=[];
   Object.keys(siteMats).forEach(k=>siteMats[k].forEach(m=>{
@@ -1108,6 +1185,7 @@ function drawSiteChips(){
     if(!l.site) return;
     if(c&&(l.client||'')!==c) return;
     if(seen.indexOf(l.site)>=0) return;
+    if(statusOf(l.client,l.site)==='done') return;   /* 完了した現場は出さない */
     seen.push(l.site); out.push(l);
   });
   const list=out.slice(0,12);
@@ -1131,10 +1209,15 @@ $('siteChips').onclick=e=>{
   queueDraft();
 };
 $('workChips').onclick=e=>{
-  const c=e.target.closest('.chip'); if(!c) return;
-  const t=$('fWork');
-  t.value=t.value?t.value+'\n'+c.dataset.work:c.dataset.work;
-  queueDraft();
+  const add=e.target.closest('[data-wadd]');
+  if(add){
+    const t=$('fWork');
+    t.value=t.value.trim()?t.value.replace(/\s+$/,'')+'\n'+add.dataset.wadd:add.dataset.wadd;
+    queueDraft();
+    return;
+  }
+  const rep=e.target.closest('[data-wrep]');
+  if(rep){ $('fWork').value=rep.dataset.wrep; queueDraft(); }
 };
 $('timeChips').onclick=e=>{
   const c=e.target.closest('.chip'); if(!c) return;
@@ -1188,7 +1271,6 @@ function render(){
     drawDateList(q);
   }
   stats();
-  matStats();
   updBackupBar();
 }
 function drawDateList(q){
@@ -1217,7 +1299,7 @@ function card(l){
   const n=l.photoCount||0;
   return `<div class="log${l.draft?' is-draft':''}">
     <div class="log-head">
-      <span class="log-date">${fmtDate(l.date)}${l.draft?'<span class="draft-mark">下書き</span>':''}</span>
+      <span class="log-date">${fmtDate(l.date)}${l.draft?'<span class="draft-mark">下書き</span>':''}${isRepairLog(l)?'<span class="repair-mark">補修</span>':''}</span>
       <span class="log-site">${l.site?esc(l.site):'現場未記入'}${l.client?`<i>${esc(l.client)}</i>`:''}</span>
     </div>
     <div class="log-body">
@@ -1324,11 +1406,18 @@ $('btnSave').onclick=async()=>{
   if(editId) logs=logs.map(l=>String(l.id)===String(editId)?rec:l);
   else logs.unshift(rec);
 
+  let turnedRepair=false;
   const ok=await saveLogs();
   if(ok){
     /* 材料はこの記録の現場の持ち物として持たせ直す。同じ記録から入れた
        古い行は入れ替わるので、編集し直しても二重に増えない */
     attachRows(rec,materials);
+    /* 完了にした現場でも、補修や追加工事で入ることがある */
+    if(String(site||'').trim()&&statusOf(client,site)==='done'){
+      setSiteStatus(client,site,'repair');
+      await saveSiteState();
+      turnedRepair=true;
+    }
     await saveSiteMats();
   }
   btn.disabled=false;
@@ -1340,7 +1429,8 @@ $('btnSave').onclick=async()=>{
   $('draftBar').hidden=true;
   buildMonths();
   render();
-  if(okPhoto) toast(rec.draft?'下書きとして保存しました':'保存しました');
+  if(okPhoto) toast((rec.draft?'下書きとして保存しました':'保存しました')
+    +(turnedRepair?'／この現場を補修対応中にしました':''));
 };
 
 function clearForm(){
@@ -1454,6 +1544,7 @@ function stats(){
     sa.map(v=>`<div class="srow"><span>${esc(v.site)}${v.client?`<i>${esc(v.client)}</i>`:''}</span><span>${v.days.size}日${v.min?' / '+hrs(v.min)+'h':''}</span></div>`).join('')
     :'<div class="nodata">この期間の記録はありません</div>';
   matStats();
+  drawManage();
 }
 
 /* ================= 書き出し ================= */
@@ -1503,7 +1594,9 @@ async function doBackup(){
       if(l.photoCount){ const ps=await getPhotos(l.id); if(ps.length) ph[l.id]=ps; }
     }
     dl('現場記録バックアップ_'+today()+'.json',
-       JSON.stringify({v:3,logs:logs,photos:ph,siteMaterials:siteMats}),'application/json');
+       JSON.stringify({v:3,logs:logs,photos:ph,siteMaterials:siteMats,
+                       siteState:siteState,templates:templates,hiddenWorks:hiddenWorks}),
+       'application/json');
   }catch(e){
     btn.disabled=false;
     toast('バックアップを作れませんでした',true);
@@ -1529,12 +1622,13 @@ $('fRestore').onchange=e=>{
     /* ---- 読み取り。ここで失敗したらファイル側の問題 ----
        受け付ける形は {v:2, logs:[...], photos:{id:[dataURL,...]}} と、
        記録だけの配列（古い書き出し）の2通り */
-    let inLogs,inPh,inSM;
+    let inLogs,inPh,inSM,inEx;
     try{
       const d=JSON.parse(ev.target.result);
       inLogs=Array.isArray(d)?d:(d&&d.logs);
       inPh=(!Array.isArray(d)&&d&&d.photos)?d.photos:{};
       inSM=(!Array.isArray(d)&&d&&d.siteMaterials)?d.siteMaterials:null;
+      inEx=Array.isArray(d)?null:d;
       if(!Array.isArray(inLogs)) throw new Error('記録の一覧が見つかりません');
     }catch(err){
       toast('バックアップとして読めませんでした（'+((err&&err.message)||'形式が違います')+'）',true);
@@ -1582,6 +1676,7 @@ $('fRestore').onchange=e=>{
     }catch(err){ stop=(err&&err.message)?String(err.message).slice(0,80):'原因不明'; }
 
     if(inSM) mergeSiteMats(inSM);
+    if(inEx) await mergeExtras(inEx);
     await saveSiteMats();
     const ok=await saveLogs();
     buildMonths();
@@ -1922,14 +2017,23 @@ function drawSites(){
     if(d>by[raw].last) by[raw].last=d;
   });
   drillSites=Object.values(by).sort((a,b)=>b.last.localeCompare(a.last));
-  $('drill').innerHTML=drillSites.length?drillSites.map((v,i)=>
-    '<button type="button" class="drill-item" data-si="'+i+'">'
-     +'<span><span class="drill-main">'+esc(siteLabel(v.raw))+'</span>'
+  const item=(v,i)=>{
+    const st=statusOf(selClient,v.raw);
+    return '<button type="button" class="drill-item" data-si="'+i+'">'
+     +'<span><span class="drill-main">'+esc(siteLabel(v.raw))
+       +' <span class="st-badge st-'+st+'">'+statusLabel(st)+'</span></span>'
      +'<span class="drill-sub">'+v.days.size+'日'+(v.min?' / '+hrs(v.min)+'h':'')+'</span></span>'
      +'<span class="drill-right">'+(v.last?'最終 '+fmtDate(v.last):'')+'</span>'
      +'<span class="drill-arrow">&rsaquo;</span>'
-    +'</button>').join('')
-    :'<div class="empty">この元請の現場はありません。</div>';
+    +'</button>';
+  };
+  /* 完了した現場は下にまとめて畳む。動いている現場を上に出したい */
+  const live=[],fin=[];
+  drillSites.forEach((v,i)=>{ (statusOf(selClient,v.raw)==='done'?fin:live).push(item(v,i)); });
+  $('drill').innerHTML=drillSites.length
+    ? live.join('')
+      +(fin.length?'<details class="done-wrap"><summary>完了した現場 '+fin.length+'件</summary>'+fin.join('')+'</details>':'')
+    : '<div class="empty">この元請の現場はありません。</div>';
 }
 
 /* 3段目：現場カルテ */
@@ -1955,6 +2059,7 @@ function drawChart(){
   const shots=set.reduce((a,l)=>a+(l.photoCount||0),0);
   const ms=rowsOf(selClient,selSite);
   const money=matSubtotal(ms);
+  const st=stateOf(selClient,selSite);
 
   const byMonth={};
   dates.forEach(d=>{ const m=monthOf(d); byMonth[m]=(byMonth[m]||0)+1; });
@@ -1967,6 +2072,13 @@ function drawChart(){
     +'<div class="chart-title">'+esc(siteLabel(selSite))+'</div>'
     +'<div class="chart-sub">'+esc(clientLabel(selClient))+'</div>'
     +'<div class="chart-sub">'+(dates.length?fmtDate(dates[0])+' 〜 '+fmtDate(dates[dates.length-1]):'記録なし')+'</div>'
+    +(st.doneAt?'<div class="chart-sub">完了日 '+fmtDate(st.doneAt)+'</div>':'')
+    +'</div>';
+  h+='<div class="status-bar">'
+    +'<span class="st-badge st-'+st.status+'">'+statusLabel(st.status)+'</span>'
+    +'<span class="status-date">'+(st.status==='repair'?'完了後に作業が発生しています':'')+'</span>'
+    +(st.status!=='done'?'<button type="button" class="btn-sub" data-st="done">完了にする</button>':'')
+    +(st.status!=='active'?'<button type="button" class="btn-sub" data-st="active">稼働中に戻す</button>':'')
     +'</div>';
   h+='<div class="board">'
     +box(dates.length+'日','稼働日数')
@@ -2013,6 +2125,13 @@ $('drill').addEventListener('input',e=>{
   queueSiteMats();
 });
 $('drill').addEventListener('click',e=>{
+  const stBtn=e.target.closest('[data-st]');
+  if(stBtn){
+    setSiteStatus(selClient,selSite,stBtn.dataset.st);
+    saveSiteState().then(()=>{ chips(); drawChart(); });
+    toast(statusLabel(stBtn.dataset.st)+'にしました');
+    return;
+  }
   const ci=e.target.closest('[data-ci]');
   if(ci){ goLevel(drillClients[Number(ci.dataset.ci)].raw,null); return; }
   const si=e.target.closest('[data-si]');
@@ -2118,6 +2237,244 @@ function mergeSiteMats(obj){
   return added;
 }
 
+/* 現場の状態・テンプレート・非表示の候補をバックアップから混ぜる。
+   今あるものは上書きしない（手元の状態を壊さないため） */
+async function mergeExtras(d){
+  let n=0;
+  if(d.siteState&&typeof d.siteState==='object'&&!Array.isArray(d.siteState)){
+    Object.keys(d.siteState).forEach(k=>{
+      if(siteState[k]) return;
+      const v=d.siteState[k];
+      if(v&&(v.status==='done'||v.status==='repair')){
+        siteState[k]={status:v.status,doneAt:String(v.doneAt||'')}; n++;
+      }
+    });
+    if(n) await saveSiteState();
+  }
+  if(Array.isArray(d.templates)){
+    const have={}; templates.forEach(t=>{ have[t.id]=1; });
+    let add=0;
+    d.templates.forEach(t=>{
+      if(!t||typeof t!=='object'||have[String(t.id)]) return;
+      templates.push({id:String(t.id||newId()),name:String(t.name||'').trim()||'名前なし',
+        client:String(t.client||''),site:String(t.site||''),work:String(t.work||''),
+        start:String(t.start||''),end:String(t.end||'')});
+      add++;
+    });
+    if(add) await saveTemplates();
+  }
+  if(Array.isArray(d.hiddenWorks)){
+    let add=0;
+    d.hiddenWorks.forEach(t=>{ const s=String(t); if(hiddenWorks.indexOf(s)<0){ hiddenWorks.push(s); add++; } });
+    if(add) await saveHidden();
+  }
+}
+
+/* ================= 現場の状態 =================
+   現場は 稼働中 / 完了 / 補修対応中 の3つ。既定は稼働中で、
+   siteState に載っていない現場は全て稼働中として扱う（既存の現場もそう）。
+
+     siteState = { "<現場キー>": { status:"done"|"repair", doneAt:"YYYY-MM-DD" } }
+
+   - 完了にすると、その時点の最終稼働日を完了日として控える
+   - 完了した現場は記録タブの現場チップに出さない（記録は全て残る）
+   - 完了した現場に記録を足すと自動で補修対応中になる。完了日はそのまま残すので、
+     完了日より後の記録を「補修」として見分けられる
+=============================================== */
+const SSKEY='genba_site_state';
+let siteState={};
+
+function stateOf(client,site){
+  const v=siteState[siteKey(client,site)];
+  const st=(v&&(v.status==='done'||v.status==='repair'))?v.status:'active';
+  return {status:st,doneAt:(v&&String(v.doneAt||''))||''};
+}
+function statusOf(client,site){ return stateOf(client,site).status; }
+function statusLabel(st){ return st==='done'?'完了':(st==='repair'?'補修対応中':'稼働中'); }
+function lastDateOf(client,site){
+  let d='';
+  logs.forEach(l=>{
+    if(String(l.client||'').trim()!==String(client||'').trim()) return;
+    if(String(l.site||'').trim()!==String(site||'').trim()) return;
+    const x=String(l.date||'');
+    if(x>d) d=x;
+  });
+  return d;
+}
+/* status を変える。完了にする時は完了日を取り直す（補修が続いた分も工期に入る） */
+function setSiteStatus(client,site,status){
+  const k=siteKey(client,site);
+  if(status==='active'){ delete siteState[k]; return; }
+  const cur=stateOf(client,site);
+  siteState[k]={
+    status:status,
+    doneAt:status==='done'?(lastDateOf(client,site)||today()):cur.doneAt
+  };
+}
+async function loadSiteState(){
+  let v=null;
+  try{ const r=await store.get(SSKEY); v=r&&r.value?JSON.parse(r.value):null; }catch(e){ v=null; }
+  siteState=(v&&typeof v==='object'&&!Array.isArray(v))?v:{};
+}
+async function saveSiteState(){
+  const ok=await setKey(SSKEY,JSON.stringify(siteState));
+  if(!ok) toast('現場の状態を保存できませんでした（'+lastErr+'）',true);
+  return ok;
+}
+/* 完了日より後の記録＝補修で入ったもの */
+function isRepairLog(l){
+  const s=stateOf(l.client,l.site);
+  return !!(s.doneAt && String(l.date||'')>s.doneAt);
+}
+
+/* ================= 作業テンプレート =================
+   手で登録したセット（元請・現場・作業内容・時間）と、
+   過去の記録から自動で拾う作業内容の候補の2本立て。
+   作業内容は複数行のことが多いので、行ごとに数えて多い順に出す。
+   文字数の制限は付けない（実際の作業内容は長く、以前の14文字制限では
+   ほとんど引っかからなかった）。
+==================================================== */
+const TPLKEY='genba_templates';
+const HIDEKEY='genba_hidden_works';
+let templates=[];
+let hiddenWorks=[];
+
+async function loadTemplates(){
+  try{ const r=await store.get(TPLKEY); const v=r&&r.value?JSON.parse(r.value):null;
+       templates=Array.isArray(v)?v.filter(t=>t&&typeof t==='object'):[]; }catch(e){ templates=[]; }
+  templates=templates.map(t=>({
+    id:String(t.id||newId()),
+    name:String(t.name||'').trim()||'名前なし',
+    client:String(t.client||''), site:String(t.site||''),
+    work:String(t.work||''), start:String(t.start||''), end:String(t.end||'')
+  }));
+  try{ const r=await store.get(HIDEKEY); const v=r&&r.value?JSON.parse(r.value):null;
+       hiddenWorks=Array.isArray(v)?v.map(x=>String(x)):[]; }catch(e){ hiddenWorks=[]; }
+}
+async function saveTemplates(){
+  const ok=await setKey(TPLKEY,JSON.stringify(templates));
+  if(!ok) toast('テンプレートを保存できませんでした（'+lastErr+'）',true);
+  return ok;
+}
+async function saveHidden(){ return await setKey(HIDEKEY,JSON.stringify(hiddenWorks)); }
+
+/* 過去の作業内容を行ごとに数えて、多い順に返す */
+function workCandidates(){
+  const count={};
+  logs.forEach(l=>{
+    String(l.work||'').split('\n').forEach(line=>{
+      const t=line.trim();
+      if(!t) return;
+      count[t]=(count[t]||0)+1;
+    });
+  });
+  return Object.keys(count)
+    .filter(t=>hiddenWorks.indexOf(t)<0)
+    .map(t=>({text:t,n:count[t]}))
+    .sort((a,b)=>b.n-a.n||a.text.localeCompare(b.text));
+}
+/* フォームに何か入っているか（テンプレートで上書きする前の確認用） */
+function formHasContent(){
+  return !!($('fClient').value.trim()||$('fSite').value.trim()||$('fWork').value.trim()
+        ||$('fNote').value.trim()||$('fStart').value||$('fEnd').value
+        ||photos.length||matCount());
+}
+function applyTemplate(t){
+  if(t.client!==undefined) $('fClient').value=t.client;
+  if(t.site!==undefined) $('fSite').value=t.site;
+  if(t.work!==undefined) $('fWork').value=t.work;
+  if(t.start!==undefined) $('fStart').value=t.start;
+  if(t.end!==undefined) $('fEnd').value=t.end;
+  drawSiteChips();
+  queueDraft();
+  toast('「'+t.name+'」を入れました');
+}
+$('tplChips').onclick=e=>{
+  const b=e.target.closest('[data-tpl]');
+  if(!b) return;
+  const t=templates.filter(x=>x.id===b.dataset.tpl)[0];
+  if(!t) return;
+  if(formHasContent()&&!confirm('入力中の内容があります。\n「'+t.name+'」で置き換えますか？')) return;
+  applyTemplate(t);
+};
+$('btnTplSave').onclick=async()=>{
+  const work=$('fWork').value.trim();
+  const client=$('fClient').value.trim();
+  const site=$('fSite').value.trim();
+  const st=$('fStart').value, en=$('fEnd').value;
+  if(!work&&!client&&!site&&!st&&!en){ toast('登録する内容がありません'); return; }
+  const suggest=(site||client||work.split('\n')[0]||'テンプレート').slice(0,20);
+  const name=prompt('テンプレートの名前',suggest);
+  if(name===null) return;
+  const nm=String(name).trim()||suggest;
+  templates.push({id:newId(),name:nm,client:client,site:site,work:work,start:st,end:en});
+  if(await saveTemplates()){ chips(); drawManage(); toast('「'+nm+'」を登録しました'); }
+};
+
+/* ---- 集計タブでの管理 ---- */
+function drawManage(){
+  const tw=$('tplManage');
+  if(tw){
+    tw.innerHTML=templates.length?templates.map(t=>{
+      const bits=[t.client,t.site,(t.start||t.end)?((t.start||'')+'〜'+(t.end||'')):''].filter(Boolean).join(' / ');
+      const w=String(t.work||'').split('\n')[0];
+      return '<div class="mng-row">'
+        +'<span class="mng-main">'+esc(t.name)+'<span class="mng-sub">'+esc([bits,w].filter(Boolean).join(' / '))+'</span></span>'
+        +'<button type="button" class="btn-sub" data-tren="'+esc(t.id)+'">名前</button>'
+        +'<button type="button" class="btn-sub" data-trdel="'+esc(t.id)+'">削除</button>'
+        +'</div>';
+    }).join(''):'<div class="nodata">まだテンプレートはありません。記録タブの「この内容を登録」から作れます。</div>';
+  }
+  const cw=$('workCandManage');
+  if(cw){
+    const cands=workCandidates().slice(0,20);
+    let h=cands.length?cands.map(c=>
+      '<div class="mng-row"><span class="mng-main">'+esc(c.text)+'<span class="mng-sub">'+c.n+'回</span></span>'
+      +'<button type="button" class="btn-sub" data-whide="'+esc(c.text)+'">出さない</button></div>').join('')
+      :'<div class="nodata">まだ候補がありません。</div>';
+    if(hiddenWorks.length){
+      h+='<p class="hint" style="margin-top:10px">出さないことにしたもの</p>'
+       +hiddenWorks.map(t=>'<div class="mng-row"><span class="mng-main">'+esc(t)+'</span>'
+       +'<button type="button" class="btn-sub" data-wshow="'+esc(t)+'">戻す</button></div>').join('');
+    }
+    cw.innerHTML=h;
+  }
+}
+$('tplManage').onclick=async e=>{
+  const ren=e.target.closest('[data-tren]');
+  if(ren){
+    const t=templates.filter(x=>x.id===ren.dataset.tren)[0];
+    if(!t) return;
+    const name=prompt('テンプレートの名前',t.name);
+    if(name===null) return;
+    t.name=String(name).trim()||t.name;
+    if(await saveTemplates()){ chips(); drawManage(); toast('名前を変えました'); }
+    return;
+  }
+  const del=e.target.closest('[data-trdel]');
+  if(del){
+    const t=templates.filter(x=>x.id===del.dataset.trdel)[0];
+    if(!t) return;
+    if(!confirm('「'+t.name+'」を削除します。よろしいですか。')) return;
+    templates=templates.filter(x=>x.id!==t.id);
+    if(await saveTemplates()){ chips(); drawManage(); toast('削除しました'); }
+  }
+};
+$('workCandManage').onclick=async e=>{
+  const h=e.target.closest('[data-whide]');
+  if(h){
+    const t=h.dataset.whide;
+    if(hiddenWorks.indexOf(t)<0) hiddenWorks.push(t);
+    if(await saveHidden()){ chips(); drawManage(); toast('候補から外しました'); }
+    return;
+  }
+  const s=e.target.closest('[data-wshow]');
+  if(s){
+    hiddenWorks=hiddenWorks.filter(x=>x!==s.dataset.wshow);
+    if(await saveHidden()){ chips(); drawManage(); toast('候補に戻しました'); }
+  }
+};
+
 /* ================= バックアップの催促 =================
    記録はこの端末の中にしか無いので、機種変更や故障で丸ごと消える。
    最後のバックアップから BACKUP_DAYS 日経ったら画面上部で知らせる。
@@ -2216,6 +2573,8 @@ drawMatRows(); updMatBtn();
   showMode();
   await loadBackupState();
   await loadSiteMats();
+  await loadSiteState();
+  await loadTemplates();
   await load();
   if(await migrateMaterials()){ buildMonths(); render(); }
   await loadNotes();

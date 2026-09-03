@@ -7,7 +7,7 @@
 
    アプリを更新した時は VERSION を上げること。
    古いキャッシュは activate で消える。 */
-const VERSION='v6';
+const VERSION='v7';
 const CACHE='genba-log-'+VERSION;
 const ASSETS=[
   './',
