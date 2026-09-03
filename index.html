@@ -196,6 +196,7 @@ button:focus-visible{outline:2px solid var(--trowel);outline-offset:2px}
 .mrow{display:flex;justify-content:space-between;font-size:14px;padding:7px 0;border-bottom:1px solid var(--line)}
 .mrow:last-child{border-bottom:none}
 .mat-date{margin-top:6px;font-size:14px}
+.mat-gone{margin-top:6px;font-size:11px;color:var(--draft);font-weight:700}
 .lnk{background:none;color:var(--ink-soft);text-decoration:underline;font-size:12px;padding:2px}
 .log-note{
   margin-top:10px;padding:9px 11px;
@@ -1403,13 +1404,13 @@ async function delLog(id){
   const l=logs.filter(x=>String(x.id)===String(id))[0];
   logs=logs.filter(x=>String(x.id)!==String(id));
   await dropPhotos(id,l?l.photoCount:0);
-  dropFrom(siteMats,id);            /* その記録から入れた材料も一緒に外す */
-  await saveSiteMats();
+  const kept=markGone(siteMats,id);   /* 材料は現場に残す。印だけ付ける */
+  if(kept) await saveSiteMats();
   await saveLogs();
   if(String(editId)===String(id)){ clearForm(); await clearDraft(); $('draftBar').hidden=true; }
   buildMonths();
   render();
-  toast('削除しました');
+  toast('削除しました'+(kept?'（材料'+kept+'件は現場に残しました）':''));
 }
 $('qSearch').oninput=render;
 
@@ -1482,7 +1483,8 @@ $('btnExport').onclick=()=>{
         const amount=String(m.qty||'').trim()+String(m.unit||'').trim();
         const price=String(m.price||'').trim()!==''?' '+yen(m.price):'';
         const d=String(m.date||'').trim()?'  '+m.date:'';
-        return '  '+(m.name||'（品名なし）')+(amount?' '+amount:'')+price+d;
+        const g=m.gone?'  ※元の日報は削除済み':'';
+        return '  '+(m.name||'（品名なし）')+(amount?' '+amount:'')+price+d+g;
       }).join('\n')
       +(sub!==null?'\n  小計 '+yen(sub):'')+'\n';
   });
@@ -1627,7 +1629,7 @@ function clientLabel(c){ return String(c==null?'':c).trim()||'（元請未記入
 function siteLabel(s){ return String(s==null?'':s).trim()||'（現場未記入）'; }
 function rowsOf(client,site){ const a=siteMats[siteKey(client,site)]; return Array.isArray(a)?a:[]; }
 
-function blankMat(){ return {name:'',qty:'',unit:'',price:'',date:'',from:''}; }
+function blankMat(){ return {name:'',qty:'',unit:'',price:'',date:'',from:'',gone:''}; }
 function matEmpty(m){
   return !String(m.name||'').trim() && !String(m.qty||'').trim()
       && !String(m.unit||'').trim() && !String(m.price||'').trim();
@@ -1645,7 +1647,8 @@ function normMats(v,def){
       unit:String(m.unit==null?'':m.unit).trim(),
       price:String(m.price==null?'':m.price).trim(),
       date:String(m.date==null?(d.date||''):m.date).trim(),
-      from:String(m.from==null?(d.from||''):m.from)
+      from:String(m.from==null?(d.from||''):m.from),
+      gone:String(m.gone==null?'':m.gone).trim()   /* 元の日報が消された印 */
     };
     if(!matEmpty(r)) out.push(r);
   }
@@ -1695,6 +1698,18 @@ function dropFrom(obj,id){
     obj[k]=obj[k].filter(m=>String(m.from||'')!==String(id));
     if(!obj[k].length) delete obj[k];
   });
+}
+/* 記録を消しても材料は残す。実際に現場へ届いたものなので、日報の削除に
+   巻き込まれるのは不自然。ただし元の日報が無くなったことが分かる印を付け、
+   記録との紐づけ（from）は外して、現場に直接足した行と同じ扱いにする */
+function markGone(obj,id){
+  let n=0;
+  Object.keys(obj).forEach(k=>{
+    obj[k].forEach(m=>{
+      if(String(m.from||'')===String(id)){ m.from=''; m.gone='1'; n++; }
+    });
+  });
+  return n;
 }
 /* 記録タブで入れた材料を、その記録の現場に付け替える */
 function attachRows(rec,rows){
@@ -1929,6 +1944,7 @@ function siteMatRowsHtml(ms){
        +'<input type="text" data-sf="price" data-sr="'+i+'" inputmode="numeric" placeholder="金額" value="'+esc(m.price)+'">'
      +'</div>'
      +'<input type="date" class="mat-date" data-sf="date" data-sr="'+i+'" value="'+esc(m.date)+'">'
+     +(m.gone?'<div class="mat-gone">元の日報は削除済み</div>':'')
      +'<button type="button" class="mat-del" data-sdel="'+i+'" aria-label="この行を消す">&times;</button>'
     +'</div>').join('');
 }
@@ -2086,7 +2102,7 @@ $('matSite').onchange=drawMatStats;
    まったく同じ行は足さない（同じファイルを二度読んでも増えないように） */
 function mergeSiteMats(obj){
   if(!obj||typeof obj!=='object'||Array.isArray(obj)) return 0;
-  const sig=m=>[m.name,m.qty,m.unit,m.price,m.date,m.from].join(SEP);
+  const sig=m=>[m.name,m.qty,m.unit,m.price,m.date,m.from,m.gone].join(SEP);
   let added=0;
   Object.keys(obj).forEach(k=>{
     const rows=normMats(obj[k]);
