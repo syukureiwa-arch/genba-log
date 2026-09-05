@@ -254,6 +254,42 @@ button:focus-visible{outline:2px solid var(--trowel);outline-offset:2px}
   background:#FBF3E2;border:1px solid var(--draft);color:#6A4E19;
   font-size:11px;font-weight:700;
 }
+
+/* ---- 工事の分類 ----
+   色はベタ塗りに使わない。左端の細い縦線と、小さな点だけに留める。
+   --cat が入っていない要素は今まで通りの見た目になる。 */
+.log[style*="--cat"]{border-left:3px solid var(--cat)}
+.drill-item[style*="--cat"]{border-left:3px solid var(--cat)}
+.srow[style*="--cat"]{border-left:3px solid var(--cat);padding-left:9px}
+.cat-line{min-width:0}
+.cat-dot{
+  flex:0 0 auto;width:10px;height:10px;border-radius:50%;
+  background:var(--cat,var(--line));
+}
+/* 記録の分類が現場と違う時に、その記録にだけ小さく出す */
+.cat-mark{
+  display:inline-block;margin-left:7px;padding:1px 7px;border-radius:9px;
+  font-size:11px;font-weight:700;
+  color:var(--cat,var(--ink-soft));
+  border:1px solid var(--cat,var(--line));
+  background:var(--white);
+}
+/* 記録タブの分類チップ。選んだものだけ細い縦線で示す */
+.chip.cat-chip{border-left:3px solid var(--cat,var(--line))}
+.chip.cat-chip.on{
+  background:var(--white);border-color:var(--trowel);
+  color:var(--ink);font-weight:700;
+  box-shadow:inset 0 0 0 1px var(--trowel);
+}
+.chip.cat-chip.on{border-left:3px solid var(--cat,var(--trowel))}
+.chart-cat{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.chart-cat .chips{margin-top:0}
+.cross-head{
+  font-size:12px;font-weight:700;color:var(--ink-soft);
+  margin:12px 0 2px;padding-bottom:4px;border-bottom:1px solid var(--line);
+}
+.cross-head:first-child{margin-top:0}
+.cross-row{padding-left:9px}
 .lnk{background:none;color:var(--ink-soft);text-decoration:underline;font-size:12px;padding:2px}
 .log-note{
   margin-top:10px;padding:9px 11px;
@@ -478,6 +514,11 @@ button{font-family:inherit;cursor:pointer;border:none}
         <div class="chips" id="siteChips"></div>
         <p class="hint" id="siteHint">元請を選ぶと、その現場だけに絞られます。</p>
       </div>
+      <div class="field" style="margin-bottom:0;margin-top:14px">
+        <label>工事の分類</label>
+        <div class="chips" id="catChips"></div>
+        <p class="hint" id="catHint">現場を選ぶと、その現場の分類が入ります。</p>
+      </div>
     </div>
   </div>
 
@@ -587,6 +628,15 @@ button{font-family:inherit;cursor:pointer;border:none}
   </div>
 
   <div class="card">
+    <div class="card-head"><span>分類ごと</span></div>
+    <div class="card-body" id="catStats"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span>元請ごと × 分類</span></div>
+    <div class="card-body" id="catCross"></div>
+  </div>
+  <div class="card">
     <div class="card-head"><span>現場ごとの材料</span></div>
     <div class="card-body">
       <label class="sr" for="matSite">現場を選ぶ</label>
@@ -602,6 +652,13 @@ button{font-family:inherit;cursor:pointer;border:none}
       <div id="tplManage"></div>
       <p class="hint" style="margin-top:12px">よく使う作業内容（記録タブのチップに出ます）</p>
       <div id="workCandManage"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><span>工事の分類の設定</span></div>
+    <div class="card-body">
+      <div id="catManage"></div>
+      <p class="hint">分類を消しても記録は消えません。その記録は未設定になります。</p>
     </div>
   </div>
   <div class="card">
@@ -1013,7 +1070,7 @@ async function saveDraft(withPhotos){
     date:$('fDate').value, client:$('fClient').value, site:$('fSite').value, work:$('fWork').value,
     note:$('fNote').value,
     start:$('fStart').value, end:$('fEnd').value,
-    materials:normMats(matRows),
+    materials:normMats(matRows), cat:curCat,
     editId, ts:Date.now()
   };
   const body=JSON.stringify(d);
@@ -1052,6 +1109,7 @@ async function restoreDraft(){
   $('fWork').value=d.work||'';
   $('fNote').value=d.note||'';
   setMemo(!!(d.note||'').trim());
+  curCat=String(d.cat||''); drawCatChips();
   matRows=normMats(d.materials); if(!matRows.length) matRows=[blankMat()];
   matFocus=0; drawMatRows(); setMat(matCount()>0); updMatBtn();
   updMemoBtn();
@@ -1177,6 +1235,8 @@ function chips(){
 
   const times=[['08:00','17:00'],['08:00','12:00'],['13:00','17:00']];
   $('timeChips').innerHTML=times.map(t=>`<button class="chip" data-a="${t[0]}" data-b="${t[1]}">${Number(t[0].slice(0,2))}:00〜${Number(t[1].slice(0,2))}:00</button>`).join('');
+
+  drawCatChips();
 }
 function drawSiteChips(){
   const c=$('fClient').value.trim();
@@ -1201,11 +1261,13 @@ $('clientChips').onclick=e=>{
   $('fClient').value=c.dataset.client;
   drawSiteChips(); queueDraft();
 };
-$('fClient').addEventListener('input',drawSiteChips);
+$('fClient').addEventListener('input',()=>{ drawSiteChips(); syncCatFromSite(); });
+$('fSite').addEventListener('input',syncCatFromSite);
 $('siteChips').onclick=e=>{
   const c=e.target.closest('.chip'); if(!c) return;
   $('fSite').value=c.dataset.site;
   if(!$('fClient').value.trim()&&c.dataset.client){ $('fClient').value=c.dataset.client; drawSiteChips(); }
+  syncCatFromSite();
   queueDraft();
 };
 $('workChips').onclick=e=>{
@@ -1297,9 +1359,11 @@ function drawDateList(q){
 function card(l){
   const t=(l.start||l.end)?`${esc(l.start)}〜${esc(l.end)}`:'';
   const n=l.photoCount||0;
-  return `<div class="log${l.draft?' is-draft':''}">
+  const lc=logCat(l);
+  const sc=siteCatOf(l.client,l.site);
+  return `<div class="log${l.draft?' is-draft':''}"${catStyle(lc)}>
     <div class="log-head">
-      <span class="log-date">${fmtDate(l.date)}${l.draft?'<span class="draft-mark">下書き</span>':''}${isRepairLog(l)?'<span class="repair-mark">補修</span>':''}</span>
+      <span class="log-date">${fmtDate(l.date)}${l.draft?'<span class="draft-mark">下書き</span>':''}${isRepairLog(l)?'<span class="repair-mark">補修</span>':''}${(lc&&lc!==sc)?`<span class="cat-mark"${catStyle(lc)}>${esc(catName(lc))}</span>`:``}</span>
       <span class="log-site">${l.site?esc(l.site):'現場未記入'}${l.client?`<i>${esc(l.client)}</i>`:''}</span>
     </div>
     <div class="log-body">
@@ -1401,6 +1465,7 @@ $('btnSave').onclick=async()=>{
     id, date:date||today(), client, site, work, note, start:st, end:en,
     photoCount:okPhoto?shot.length:(prev?prev.photoCount||0:0),
     c:1,
+    cat:curCat,
     draft:isDraft(site,work,materials)
   };
   if(editId) logs=logs.map(l=>String(l.id)===String(editId)?rec:l);
@@ -1412,6 +1477,12 @@ $('btnSave').onclick=async()=>{
     /* 材料はこの記録の現場の持ち物として持たせ直す。同じ記録から入れた
        古い行は入れ替わるので、編集し直しても二重に増えない */
     attachRows(rec,materials);
+    /* 現場にまだ分類が無ければ、この記録の分類を現場のものとして引き継ぐ。
+       既に付いている現場は変えない（その日の記録だけ別分類にできるように） */
+    if(String(site||'').trim()&&curCat&&!siteCatOf(client,site)){
+      setSiteCat(client,site,curCat);
+      await saveSiteCats();
+    }
     /* 完了にした現場でも、補修や追加工事で入ることがある */
     if(String(site||'').trim()&&statusOf(client,site)==='done'){
       setSiteStatus(client,site,'repair');
@@ -1441,6 +1512,7 @@ function clearForm(){
   $('fNote').value='';
   setMemo(false); updMemoBtn();
   matRows=[blankMat()]; matFocus=0; drawMatRows(); setMat(false); updMatBtn();
+  curCat=''; drawCatChips();
   $('fStart').value='';
   $('fEnd').value='';
   photos=[]; drawPhotos();
@@ -1475,6 +1547,7 @@ async function editLog(id){
   $('fWork').value=l.work||'';
   $('fNote').value=l.note||'';
   setMemo(!!(l.note||'').trim());
+  curCat=String(l.cat||siteCatOf(l.client,l.site)); drawCatChips();
   matRows=rowsOf(l.client,l.site).filter(m=>String(m.from||'')===String(l.id))
                                  .map(m=>Object.assign({},m));
   if(!matRows.length) matRows=[blankMat()];
@@ -1545,6 +1618,8 @@ function stats(){
     :'<div class="nodata">この期間の記録はありません</div>';
   matStats();
   drawManage();
+  drawCatManage();
+  catStats();
 }
 
 /* ================= 書き出し ================= */
@@ -1595,7 +1670,8 @@ async function doBackup(){
     }
     dl('現場記録バックアップ_'+today()+'.json',
        JSON.stringify({v:3,logs:logs,photos:ph,siteMaterials:siteMats,
-                       siteState:siteState,templates:templates,hiddenWorks:hiddenWorks}),
+                       siteState:siteState,templates:templates,hiddenWorks:hiddenWorks,
+                       categories:cats,siteCats:siteCats}),
        'application/json');
   }catch(e){
     btn.disabled=false;
@@ -2019,7 +2095,7 @@ function drawSites(){
   drillSites=Object.values(by).sort((a,b)=>b.last.localeCompare(a.last));
   const item=(v,i)=>{
     const st=statusOf(selClient,v.raw);
-    return '<button type="button" class="drill-item" data-si="'+i+'">'
+    return '<button type="button" class="drill-item" data-si="'+i+'"'+catStyle(siteCatOf(selClient,v.raw))+'>'
      +'<span><span class="drill-main">'+esc(siteLabel(v.raw))
        +' <span class="st-badge st-'+st+'">'+statusLabel(st)+'</span></span>'
      +'<span class="drill-sub">'+v.days.size+'日'+(v.min?' / '+hrs(v.min)+'h':'')+'</span></span>'
@@ -2080,6 +2156,12 @@ function drawChart(){
     +(st.status!=='done'?'<button type="button" class="btn-sub" data-st="done">完了にする</button>':'')
     +(st.status!=='active'?'<button type="button" class="btn-sub" data-st="active">稼働中に戻す</button>':'')
     +'</div>';
+  const scat=siteCatOf(selClient,selSite);
+  h+='<div class="chart-cat"><span class="drill-sub">工事の分類</span><div class="chips">'
+    +'<button type="button" class="chip cat-chip'+(scat?'':' on')+'" data-scat="">未設定</button>'
+    +cats.map(c=>'<button type="button" class="chip cat-chip'+(scat===c.id?' on':'')+'"'
+      +' data-scat="'+esc(c.id)+'" style="--cat:'+CAT_COLORS[c.ci%CAT_COLORS.length]+'">'+esc(c.name)+'</button>').join('')
+    +'</div></div>';
   h+='<div class="board">'
     +box(dates.length+'日','稼働日数')
     +box(hrs(min)+'h','合計作業時間')
@@ -2125,6 +2207,13 @@ $('drill').addEventListener('input',e=>{
   queueSiteMats();
 });
 $('drill').addEventListener('click',e=>{
+  const scBtn=e.target.closest('[data-scat]');
+  if(scBtn){
+    setSiteCat(selClient,selSite,scBtn.dataset.scat);
+    saveSiteCats().then(()=>{ drawChart(); });
+    toast(scBtn.dataset.scat?catName(scBtn.dataset.scat)+'にしました':'分類を外しました');
+    return;
+  }
   const stBtn=e.target.closest('[data-st]');
   if(stBtn){
     setSiteStatus(selClient,selSite,stBtn.dataset.st);
@@ -2475,6 +2564,197 @@ $('workCandManage').onclick=async e=>{
   }
 };
 
+/* ================= 工事の分類 =================
+   分類は基本的に現場に付く（siteCats）。記録を作る時に現場の分類が自動で入り、
+   その記録だけ別の分類に変えることもできる（l.cat）。
+   新築の現場に数年後の補修が入っても、現場の分類は新築のまま残せる。
+
+     cats     = [ {id,name,ci} ]            ci は色の番号
+     siteCats = { "<現場キー>": "<分類id>" }
+     記録      = { ..., cat:"<分類id>" }     無ければ未設定
+
+   既存の記録と現場は cat を持たないので、全て未設定として扱われる。
+   分類を消しても記録の cat はそのまま残す（消えた分類は「未設定」と同じ扱い）。
+=============================================== */
+const CATKEY='genba_categories';
+const SCKEY='genba_site_cats';
+/* 彩度は抑えめ。モルタル色＋こて青の中で浮かない範囲で選ぶ */
+const CAT_COLORS=['#5B7C99','#7A8B5A','#9C7B4D','#7D6E8C','#4F7E77','#96634F'];
+const DEFAULT_CATS=['新築','リフォーム','補修','軽工事'];
+
+let cats=[];
+let siteCats={};
+
+function catById(id){
+  if(!id) return null;
+  return cats.filter(c=>c.id===String(id))[0]||null;
+}
+function catName(id){ const c=catById(id); return c?c.name:''; }
+function catColor(id){
+  const c=catById(id);
+  return c?CAT_COLORS[(c.ci||0)%CAT_COLORS.length]:'';
+}
+function siteCatOf(client,site){ return String(siteCats[siteKey(client,site)]||''); }
+/* 記録の分類。記録に付いているものだけを見る。
+   現場の分類は「記録を作る時の初期値」として使うだけで、表示や集計では
+   引き当てない。そうしないと、分類を付ける前からある古い記録が、
+   後から現場に分類を付けた途端にその分類として数えられてしまう。 */
+function logCat(l){ return String((l&&l.cat)||''); }
+/* 分類の色を CSS 変数で渡す。ベタ塗りはせず、左の細い縦線にだけ使う */
+function catStyle(id){
+  const col=catColor(id);
+  return col?' style="--cat:'+col+'"':'';
+}
+
+async function loadCats(){
+  let v=null;
+  try{ const r=await store.get(CATKEY); v=r&&r.value?JSON.parse(r.value):null; }catch(e){ v=null; }
+  if(Array.isArray(v)){
+    cats=v.filter(c=>c&&typeof c==='object').map((c,i)=>({
+      id:String(c.id||newId()), name:String(c.name||'').trim()||'名前なし',
+      ci:Number.isFinite(c.ci)?c.ci:i
+    }));
+  }else{
+    /* 初回だけ既定の4つを作る */
+    cats=DEFAULT_CATS.map((n,i)=>({id:newId(),name:n,ci:i}));
+    await saveCats();
+  }
+  let s=null;
+  try{ const r=await store.get(SCKEY); s=r&&r.value?JSON.parse(r.value):null; }catch(e){ s=null; }
+  siteCats=(s&&typeof s==='object'&&!Array.isArray(s))?s:{};
+}
+async function saveCats(){
+  const ok=await setKey(CATKEY,JSON.stringify(cats));
+  if(!ok) toast('分類を保存できませんでした（'+lastErr+'）',true);
+  return ok;
+}
+async function saveSiteCats(){
+  const ok=await setKey(SCKEY,JSON.stringify(siteCats));
+  if(!ok) toast('現場の分類を保存できませんでした（'+lastErr+'）',true);
+  return ok;
+}
+function setSiteCat(client,site,id){
+  const k=siteKey(client,site);
+  if(id) siteCats[k]=String(id); else delete siteCats[k];
+}
+function nextCi(){
+  const used={}; cats.forEach(c=>{ used[c.ci%CAT_COLORS.length]=1; });
+  for(let i=0;i<CAT_COLORS.length;i++) if(!used[i]) return i;
+  return cats.length%CAT_COLORS.length;
+}
+
+/* ---- 記録タブの分類チップ ---- */
+let curCat='';
+function drawCatChips(){
+  const box=$('catChips');
+  if(!box) return;
+  box.innerHTML='<button type="button" class="chip cat-chip'+(curCat?'':' on')+'" data-cat="">未設定</button>'
+    +cats.map(c=>'<button type="button" class="chip cat-chip'+(curCat===c.id?' on':'')+'"'
+      +' data-cat="'+esc(c.id)+'" style="--cat:'+CAT_COLORS[c.ci%CAT_COLORS.length]+'">'+esc(c.name)+'</button>').join('');
+  const sc=siteCatOf($('fClient').value,$('fSite').value);
+  const hint=$('catHint');
+  if(hint){
+    hint.textContent=(sc&&curCat&&sc!==curCat)
+      ? 'この現場は「'+catName(sc)+'」です。この記録だけ「'+catName(curCat)+'」にします。'
+      : '現場を選ぶと、その現場の分類が入ります。';
+  }
+}
+/* 現場が変わったら、その現場の分類を引き当てる */
+function syncCatFromSite(){
+  curCat=siteCatOf($('fClient').value,$('fSite').value);
+  drawCatChips();
+}
+$('catChips').onclick=e=>{
+  const b=e.target.closest('[data-cat]');
+  if(!b) return;
+  curCat=b.dataset.cat;
+  drawCatChips();
+  queueDraft();
+};
+
+/* ---- 集計タブでの設定 ---- */
+function drawCatManage(){
+  const box=$('catManage');
+  if(!box) return;
+  box.innerHTML=cats.map(c=>
+    '<div class="mng-row" style="--cat:'+CAT_COLORS[c.ci%CAT_COLORS.length]+'">'
+     +'<span class="cat-dot"></span>'
+     +'<span class="mng-main">'+esc(c.name)+'</span>'
+     +'<button type="button" class="btn-sub" data-cren="'+esc(c.id)+'">名前</button>'
+     +'<button type="button" class="btn-sub" data-crdel="'+esc(c.id)+'">削除</button>'
+    +'</div>').join('')
+    +'<button type="button" class="btn-sub" id="btnCatAdd" style="width:100%;margin-top:8px">＋ 分類を足す</button>';
+}
+$('catManage').onclick=async e=>{
+  if(e.target.closest('#btnCatAdd')){
+    const name=prompt('分類の名前');
+    if(name===null) return;
+    const nm=String(name).trim();
+    if(!nm){ toast('名前を入れてください'); return; }
+    cats.push({id:newId(),name:nm,ci:nextCi()});
+    if(await saveCats()){ drawCatManage(); drawCatChips(); render(); toast('「'+nm+'」を足しました'); }
+    return;
+  }
+  const ren=e.target.closest('[data-cren]');
+  if(ren){
+    const c=catById(ren.dataset.cren); if(!c) return;
+    const name=prompt('分類の名前',c.name);
+    if(name===null) return;
+    c.name=String(name).trim()||c.name;
+    if(await saveCats()){ drawCatManage(); drawCatChips(); render(); toast('名前を変えました'); }
+    return;
+  }
+  const del=e.target.closest('[data-crdel]');
+  if(del){
+    const c=catById(del.dataset.crdel); if(!c) return;
+    const used=logs.filter(l=>String(l.cat||'')===c.id).length;
+    const sites=Object.keys(siteCats).filter(k=>siteCats[k]===c.id).length;
+    if(!confirm('「'+c.name+'」を削除します。'
+      +(used||sites?'\n（記録'+used+'件・現場'+sites+'件に付いていますが、未設定になるだけで記録は消えません）':'')
+      +'\nよろしいですか。')) return;
+    cats=cats.filter(x=>x.id!==c.id);
+    Object.keys(siteCats).forEach(k=>{ if(siteCats[k]===c.id) delete siteCats[k]; });
+    if(await saveCats()){ await saveSiteCats(); drawCatManage(); drawCatChips(); render(); toast('削除しました'); }
+  }
+};
+
+/* ---- 集計：分類ごと ---- */
+function catStats(){
+  const set=scoped();
+  const by={};
+  set.forEach(l=>{
+    const id=logCat(l);
+    const k=id||'';
+    if(!by[k]) by[k]={id:k,days:new Set(),min:0};
+    by[k].days.add(l.date); by[k].min+=mins(l);
+  });
+  const arr=Object.values(by).sort((a,b)=>b.days.size-a.days.size);
+  $('catStats').innerHTML=arr.length?arr.map(v=>
+    '<div class="srow"'+catStyle(v.id)+'>'
+     +'<span class="cat-line">'+esc(v.id?(catName(v.id)||'（消えた分類）'):'未設定')+'</span>'
+     +'<span>'+v.days.size+'日'+(v.min?' / '+hrs(v.min)+'h':'')+'</span></div>').join('')
+    :'<div class="nodata">この期間の記録はありません</div>';
+
+  /* 元請ごと × 分類ごと */
+  const cross={};
+  set.forEach(l=>{
+    const c=clientLabel(l.client);
+    const id=logCat(l)||'';
+    if(!cross[c]) cross[c]={};
+    if(!cross[c][id]) cross[c][id]={days:new Set(),min:0};
+    cross[c][id].days.add(l.date); cross[c][id].min+=mins(l);
+  });
+  const keys=Object.keys(cross).sort();
+  $('catCross').innerHTML=keys.length?keys.map(c=>{
+    const inner=Object.keys(cross[c]).map(id=>({id:id,v:cross[c][id]}))
+      .sort((a,b)=>b.v.days.size-a.v.days.size);
+    return '<div class="cross-head">'+esc(c)+'</div>'
+      +inner.map(x=>'<div class="srow cross-row"'+catStyle(x.id)+'>'
+        +'<span class="cat-line">'+esc(x.id?(catName(x.id)||'（消えた分類）'):'未設定')+'</span>'
+        +'<span>'+x.v.days.size+'日'+(x.v.min?' / '+hrs(x.v.min)+'h':'')+'</span></div>').join('');
+  }).join(''):'<div class="nodata">この期間の記録はありません</div>';
+}
+
 /* ================= バックアップの催促 =================
    記録はこの端末の中にしか無いので、機種変更や故障で丸ごと消える。
    最後のバックアップから BACKUP_DAYS 日経ったら画面上部で知らせる。
@@ -2575,6 +2855,7 @@ drawMatRows(); updMatBtn();
   await loadSiteMats();
   await loadSiteState();
   await loadTemplates();
+  await loadCats();
   await load();
   if(await migrateMaterials()){ buildMonths(); render(); }
   await loadNotes();
